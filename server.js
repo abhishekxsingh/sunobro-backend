@@ -39,7 +39,7 @@ app.use((err, req, res, next) => {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    logger.info(`sunobro-backend listening on port ${PORT} (${NODE_ENV})`);
+    logger.info(`server on port ${PORT} (${NODE_ENV})`);
   });
 }
 
