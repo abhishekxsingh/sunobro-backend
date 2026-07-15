@@ -1,0 +1,357 @@
+{
+  "info": {
+    "name": "Sunobro Backend",
+    "description": "REST API for sunobro-backend — serves admin-sunobro (ops dashboard) and sunobro-website (storefront). Auth is httpOnly-cookie based; Postman's cookie jar handles this automatically as long as requests run in collection order against the same {{base_url}}. Run the whole collection top-to-bottom (Runner or `newman run`) for a working demo — logout requests are grouped in the final Cleanup folder on purpose, so earlier folders that need an active session still have one.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "b6f2a6b0-8e2a-4b1a-9b0a-sunobro-backend"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:4000", "type": "string" },
+    { "key": "admin_email", "value": "ops@sunobro.com", "type": "string" },
+    { "key": "admin_password", "value": "ChangeMe123!", "type": "string" },
+    { "key": "product_slug", "value": "compile-tee", "type": "string" },
+    { "key": "product_id", "value": "", "type": "string" },
+    { "key": "variant_sku", "value": "COMPILE-TEE-S-BLACK", "type": "string" },
+    { "key": "order_id", "value": "", "type": "string" },
+    { "key": "customer_email", "value": "ada@example.com", "type": "string" },
+    { "key": "customer_password", "value": "SuperSecret123!", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Ping",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/ping", "host": ["{{base_url}}"], "path": ["ping"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/admin/auth/login", "host": ["{{base_url}}"], "path": ["admin", "auth", "login"] },
+            "description": "Sets the httpOnly sb_admin_session cookie. Wrong credentials return 401 with {\"message\":\"Invalid email or password.\"}."
+          },
+          "response": []
+        },
+        {
+          "name": "Me",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/admin/auth/me", "host": ["{{base_url}}"], "path": ["admin", "auth", "me"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Stats",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/admin/stats", "host": ["{{base_url}}"], "path": ["admin", "stats"] },
+            "description": "Requires an active admin session (run Admin Auth > Login first). Returns { grossRevenue24h, revenueChangePct, activeOrders, conversionRatePct, conversionChangePct }."
+          },
+          "response": []
+        },
+        {
+          "name": "Inventory",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/admin/inventory", "host": ["{{base_url}}"], "path": ["admin", "inventory"] },
+            "description": "Returns [{ sku, name, stock, status: OPTIMAL|LOW|CRITICAL }]."
+          },
+          "response": []
+        },
+        {
+          "name": "Orders Queue",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/admin/orders", "host": ["{{base_url}}"], "path": ["admin", "orders"] },
+            "description": "Returns [{ ref, client, value, currency, status: PENDING|FULFILLED }]."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Customer Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Idempotent for repeat runs: 201 on first run, 409 (email taken) on later runs — both are fine.",
+                  "pm.test('status is 201 or 409', () => pm.expect([201, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ada Lovelace\",\n  \"email\": \"{{customer_email}}\",\n  \"phone\": \"+91 90000 00000\",\n  \"password\": \"{{customer_password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customer_email}}\",\n  \"password\": \"{{customer_password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] },
+            "description": "Sets the httpOnly sb_session cookie used by GET /orders/me below."
+          },
+          "response": []
+        },
+        {
+          "name": "Me",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/auth/me", "host": ["{{base_url}}"], "path": ["auth", "me"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.length) pm.environment.set('product_id', body[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/products", "host": ["{{base_url}}"], "path": ["products"] },
+            "description": "Captures the first product's id into {{product_id}} for the next two requests."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product (by slug)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/products/{{product_slug}}",
+              "host": ["{{base_url}}"],
+              "path": ["products", "{{product_slug}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product (by id)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["products", "{{product_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product (404 case)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 404', () => pm.response.to.have.status(404));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/products/does-not-exist", "host": ["{{base_url}}"], "path": ["products", "does-not-exist"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('order_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"{{product_id}}\",\n      \"name\": \"Compile\",\n      \"size\": \"S\",\n      \"color\": \"Black\",\n      \"sku\": \"{{variant_sku}}\",\n      \"price\": 65,\n      \"qty\": 1\n    }\n  ],\n  \"shipping\": {\n    \"firstName\": \"Ada\",\n    \"lastName\": \"Lovelace\",\n    \"street\": \"1 Analytical Engine Way\",\n    \"city\": \"London\",\n    \"postalCode\": \"EC1A 1BB\",\n    \"country\": \"UK\"\n  },\n  \"subtotal\": 65,\n  \"shippingFee\": 0,\n  \"tax\": 0,\n  \"total\": 65\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] },
+            "description": "subtotal/tax/total are display hints only — the backend always recomputes the real charge server-side from the product/variant price in the DB, never trusting client-submitted amounts. Works whether or not a customer session cookie is present (guest checkout is supported); if Customer Auth > Login ran earlier in this collection, this order attaches to that logged-in customer. variant_sku must exist in product_variants — the default matches the seeded demo data (npx sequelize db:seed:all)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order by ID",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["orders", "{{order_id}}"] },
+            "description": "Guest-accessible by design: knowing the order's id/reference is the capability token, same pattern Shopify/Stripe use for guest order lookup."
+          },
+          "response": []
+        },
+        {
+          "name": "List My Orders",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/orders/me", "host": ["{{base_url}}"], "path": ["orders", "me"] },
+            "description": "Requires an active customer session — run Customer Auth > Login earlier in the collection. Returns 401 otherwise."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments (stubbed — 501 until Cashfree phase lands)",
+      "item": [
+        {
+          "name": "Create Payment Order",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 501 (not yet implemented)', () => pm.response.to.have.status(501));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"amount\": 65,\n  \"currency\": \"INR\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/payments/create-order", "host": ["{{base_url}}"], "path": ["payments", "create-order"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Payment",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 501 (not yet implemented)', () => pm.response.to.have.status(501));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"paymentOrderId\": \"<cashfree-order-id>\",\n  \"paymentId\": \"<cashfree-payment-id>\",\n  \"signature\": \"<signature>\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/payments/verify", "host": ["{{base_url}}"], "path": ["payments", "verify"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cleanup",
+      "item": [
+        {
+          "name": "Admin Logout",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 204', () => pm.response.to.have.status(204));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{base_url}}/admin/auth/logout", "host": ["{{base_url}}"], "path": ["admin", "auth", "logout"] }
+          },
+          "response": []
+        },
+        {
+          "name": "Customer Logout",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 204', () => pm.response.to.have.status(204));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{base_url}}/auth/logout", "host": ["{{base_url}}"], "path": ["auth", "logout"] }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
