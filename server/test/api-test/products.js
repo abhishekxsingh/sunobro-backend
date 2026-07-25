@@ -22,7 +22,7 @@ describe('Products', () => {
   });
 
   after(async () => {
-    await Product.destroy({ where: { id: product.id } });
+    await Product.findByIdAndDelete(product._id);
   });
 
   it('GET /products includes the seeded product with the frontend-facing shape', async () => {

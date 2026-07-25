@@ -1,5 +1,5 @@
 const ProductsService = require('../../services/customer/products');
-const { toProductDTO } = require('../../utils/serializers');
+const { toProductDTO, toProductWithVariantsDTO } = require('../../utils/serializers');
 
 const list = async (req, res) => {
   try {
@@ -19,13 +19,13 @@ const list = async (req, res) => {
 const get = async (req, res) => {
   try {
     const { params: { idOrSlug } } = req;
-    const { doc } = await ProductsService.get(idOrSlug);
+    const result = await ProductsService.get(idOrSlug);
 
-    if (!doc) {
+    if (result.errors) {
       return res.notFound();
     }
 
-    return res.getRequest(toProductDTO(doc));
+    return res.getRequest(toProductWithVariantsDTO(result.doc, result.variants));
   } catch (error) {
     return res.serverError(error);
   }

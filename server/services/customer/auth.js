@@ -1,6 +1,4 @@
-const {
-  sequelize, Customer,
-} = require('../../database/models');
+const { Customer } = require('../../database/models');
 const password = require('../../utils/password');
 const jwt = require('../../utils/jwt');
 const { TOKEN_TYPE } = require('../../utils/constant');
@@ -12,39 +10,33 @@ const register = async (payload) => {
   const {
     name: customerName, email, phone, password: plainPassword,
   } = payload;
-  const transaction = await sequelize.transaction();
 
-  try {
-    const existing = await Customer.findOne({ where: { email }, transaction });
-    if (existing) {
-      await transaction.rollback();
-
-      return { errors: [{ name: 'email', message: DUPLICATE_EMAIL_MESSAGE }] };
-    }
-
-    const passwordHash = await password.hash(plainPassword);
-    const customer = await Customer.create({
-      name: customerName, email, phone, passwordHash,
-    }, { transaction });
-
-    await transaction.commit();
-
-    const token = jwt.sign({ type: TOKEN_TYPE.CUSTOMER, sub: customer.id });
-
-    return { doc: { customer, token } };
-  } catch (error) {
-    await transaction.rollback();
-
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return { errors: [{ name: 'email', message: DUPLICATE_EMAIL_MESSAGE }] };
-    }
-
-    throw error;
+  const existing = await Customer.findOne({ email });
+  if (existing) {
+    return { errors: [{ name: 'email', message: DUPLICATE_EMAIL_MESSAGE }] };
   }
+
+  const passwordHash = await password.hash(plainPassword);
+
+  let customer;
+  try {
+    customer = await Customer.create({
+      name: customerName, email, phone, passwordHash,
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      return { errors: [{ name: 'email', message: DUPLICATE_EMAIL_MESSAGE }] };
+    }
+    throw err;
+  }
+
+  const token = jwt.sign({ type: TOKEN_TYPE.CUSTOMER, sub: customer.id });
+
+  return { doc: { customer, token } };
 };
 
 const login = async ({ email, password: plainPassword }) => {
-  const customer = await Customer.findOne({ where: { email } });
+  const customer = await Customer.findOne({ email });
   if (!customer) {
     return { errors: [{ name: 'credentials', message: INVALID_CREDENTIALS_MESSAGE }] };
   }
@@ -60,7 +52,7 @@ const login = async ({ email, password: plainPassword }) => {
 };
 
 const me = async (customerId) => {
-  const customer = await Customer.findByPk(customerId);
+  const customer = await Customer.findById(customerId);
   if (!customer) {
     return { errors: [{ name: 'customer', message: 'Not authenticated.' }] };
   }
@@ -68,6 +60,4 @@ const me = async (customerId) => {
   return { doc: customer };
 };
 
-module.exports = {
-  register, login, me,
-};
+module.exports = { register, login, me };

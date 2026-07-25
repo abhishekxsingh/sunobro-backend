@@ -6,7 +6,7 @@ const { TOKEN_TYPE } = require('../../utils/constant');
 const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.';
 
 const login = async ({ email, password: plainPassword }) => {
-  const admin = await Admin.findOne({ where: { email } });
+  const admin = await Admin.findOne({ email });
   if (!admin) {
     return { errors: [{ name: 'credentials', message: INVALID_CREDENTIALS_MESSAGE }] };
   }
@@ -22,7 +22,7 @@ const login = async ({ email, password: plainPassword }) => {
 };
 
 const me = async (adminId) => {
-  const admin = await Admin.findByPk(adminId);
+  const admin = await Admin.findById(adminId);
   if (!admin) {
     return { errors: [{ name: 'admin', message: 'Not authenticated.' }] };
   }

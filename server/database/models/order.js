@@ -1,39 +1,44 @@
-module.exports = (sequelize, DataTypes) => {
-  const Order = sequelize.define('Order', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    reference: { type: DataTypes.STRING, allowNull: false, unique: true },
-    customerId: { type: DataTypes.UUID, allowNull: true },
-    status: {
-      type: DataTypes.ENUM('pending', 'paid', 'shipped', 'delivered', 'cancelled'),
-      allowNull: false,
-      defaultValue: 'pending',
-    },
-    subtotal: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-    shippingFee: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
-    tax: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
-    total: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-    currency: { type: DataTypes.STRING(3), allowNull: false, defaultValue: 'INR' },
-    shippingFirstName: { type: DataTypes.STRING, allowNull: false },
-    shippingLastName: { type: DataTypes.STRING, allowNull: false },
-    shippingStreet: { type: DataTypes.STRING, allowNull: false },
-    shippingCity: { type: DataTypes.STRING, allowNull: false },
-    shippingPostalCode: { type: DataTypes.STRING, allowNull: false },
-    shippingCountry: { type: DataTypes.STRING, allowNull: false },
-    destination: { type: DataTypes.STRING, allowNull: true },
-    estimatedArrival: { type: DataTypes.STRING, allowNull: true },
-  }, {
-    tableName: 'orders',
-  });
+const { Schema, model } = require('mongoose');
 
-  Order.associate = (db) => {
-    Order.belongsTo(db.Customer, { foreignKey: 'customerId', as: 'customer' });
-    Order.hasMany(db.OrderItem, { foreignKey: 'orderId', as: 'items' });
-    Order.hasMany(db.OrderStatusHistory, { foreignKey: 'orderId', as: 'statusHistory' });
-  };
+const orderItemSchema = new Schema({
+  productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+  name: { type: String, required: true },
+  size: { type: String, required: true },
+  color: { type: String, required: true },
+  sku: { type: String, required: true },
+  price: { type: Number, required: true },
+  qty: { type: Number, required: true },
+}, { _id: false });
 
-  return Order;
-};
+const statusHistorySchema = new Schema({
+  status: { type: String, required: true },
+  note: { type: String },
+  createdAt: { type: Date, default: Date.now },
+}, { _id: false });
+
+const orderSchema = new Schema({
+  reference: { type: String, required: true, unique: true },
+  customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
+  status: {
+    type: String,
+    enum: ['pending', 'paid', 'shipped', 'delivered', 'cancelled'],
+    default: 'pending',
+  },
+  subtotal: { type: Number, required: true },
+  shippingFee: { type: Number, default: 0 },
+  tax: { type: Number, default: 0 },
+  total: { type: Number, required: true },
+  currency: { type: String, maxlength: 3, default: 'INR' },
+  shippingFirstName: { type: String, required: true },
+  shippingLastName: { type: String, required: true },
+  shippingStreet: { type: String, required: true },
+  shippingCity: { type: String, required: true },
+  shippingPostalCode: { type: String, required: true },
+  shippingCountry: { type: String, required: true },
+  destination: { type: String },
+  estimatedArrival: { type: String },
+  items: { type: [orderItemSchema], default: [] },
+  statusHistory: { type: [statusHistorySchema], default: [] },
+}, { timestamps: true });
+
+module.exports = model('Order', orderSchema);

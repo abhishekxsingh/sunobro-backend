@@ -9,10 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "start:dev": "node --watch server.js",
-    "db:create": "sequelize db:create",
-    "db:migrate": "sequelize db:migrate",
-    "db:migrate:undo": "sequelize db:migrate:undo",
-    "db:seed": "sequelize db:seed:all",
+    "db:seed": "node database/seed/seed.js",
     "test": "npm-run-all --silent test-lint test-mocha",
     "test-lint": "eslint controllers routes services database dto-schemas utils cron config test server.js",
     "test-mocha": "cross-env NODE_ENV=test nyc mocha --recursive --exit test"
@@ -29,11 +26,9 @@
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.11.5",
+    "mongoose": "^8.24.1",
     "pino": "^9.0.0",
-    "pino-http": "^10.0.0",
-    "sequelize": "^6.37.3",
-    "uuid": "^9.0.1"
+    "pino-http": "^10.0.0"
   },
   "devDependencies": {
     "chai": "^4.3.10",
@@ -46,7 +41,6 @@
     "mocha": "^10.4.0",
     "npm-run-all": "^4.1.5",
     "nyc": "^15.1.0",
-    "sequelize-cli": "^6.6.2",
     "sinon": "^17.0.1"
   }
 }

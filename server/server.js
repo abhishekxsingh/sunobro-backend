@@ -4,7 +4,10 @@ const compression = require('compression');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 
-const { PORT, CORS_ORIGINS, NODE_ENV } = require('./config');
+const {
+  PORT, CORS_ORIGINS, NODE_ENV, MONGODB_URI,
+} = require('./config');
+const { connect } = require('./database/models');
 const correlationId = require('./utils/correlation-id');
 const attachResponseHelpers = require('./utils/middleware/http');
 const logger = require('./utils/logger');
@@ -16,7 +19,7 @@ app.enable('trust proxy');
 app.use(correlationId);
 app.use(attachResponseHelpers);
 app.use(cors({
-  origin: CORS_ORIGINS.length > 0 ? CORS_ORIGINS : true,
+  origin: CORS_ORIGINS.length > 0 ? CORS_ORIGINS : false,
   credentials: true,
 }));
 app.use(compression());
@@ -49,9 +52,16 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    logger.info(`server on port ${PORT} (${NODE_ENV})`);
-  });
+  connect(MONGODB_URI)
+    .then(() => {
+      app.listen(PORT, () => {
+        logger.info(`server on port ${PORT} (${NODE_ENV})`);
+      });
+    })
+    .catch((err) => {
+      logger.error(err, 'MongoDB connection failed');
+      process.exit(1);
+    });
 }
 
 module.exports = app;

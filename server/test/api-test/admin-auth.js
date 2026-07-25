@@ -12,7 +12,7 @@ describe('Admin auth', () => {
   const plainPassword = 'SuperSecret123!';
 
   before(async () => {
-    await Admin.destroy({ where: { email } });
+    await Admin.deleteOne({ email });
     await Admin.create({
       name: 'Test Admin',
       email,
@@ -22,7 +22,7 @@ describe('Admin auth', () => {
   });
 
   after(async () => {
-    await Admin.destroy({ where: { email } });
+    await Admin.deleteOne({ email });
   });
 
   it('rejects a wrong password with 401', async () => {

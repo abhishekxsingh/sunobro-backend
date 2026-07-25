@@ -30,7 +30,7 @@ describe('Orders', () => {
       sizes: ['M'],
     });
     variant = await ProductVariant.create({
-      productId: product.id,
+      productId: product._id,
       size: 'M',
       color: 'Black',
       sku: 'ORDERS-TEST-TEE-M-BLACK',
@@ -39,8 +39,8 @@ describe('Orders', () => {
   });
 
   after(async () => {
-    await ProductVariant.destroy({ where: { id: variant.id } });
-    await Product.destroy({ where: { id: product.id } });
+    await ProductVariant.findByIdAndDelete(variant._id);
+    await Product.findByIdAndDelete(product._id);
   });
 
   it('recomputes totals server-side instead of trusting client-submitted amounts', async () => {
@@ -79,8 +79,8 @@ describe('Orders', () => {
         total: 100,
       });
 
-    await variant.reload();
-    expect(variant.stock).to.equal(2); // 5 - 2 (first test) - 1 (this test)
+    const refreshed = await ProductVariant.findById(variant._id);
+    expect(refreshed.stock).to.equal(2); // 5 - 2 (first test) - 1 (this test)
   });
 
   it('rejects an order for insufficient stock with 409', async () => {

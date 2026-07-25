@@ -1,30 +1,50 @@
+const mongoose = require('mongoose');
 const { Order } = require('../../database/models');
-const { ADMIN_ORDER_QUEUE_STATUS, ORDER_STATUS, PAGINATION } = require('../../utils/constant');
+const { PAGINATION } = require('../../utils/constant');
 
-// QueueOrder only has a two-state status; `delivered` maps to FULFILLED,
-// everything else (pending/paid/shipped/cancelled) collapses to PENDING.
+const invalidId = (id) => !mongoose.isValidObjectId(id);
+
 const list = async ({ page = 1, limit = PAGINATION.DEFAULT_LIMIT } = {}) => {
   const cappedLimit = Math.min(Number(limit) || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
   const currentPage = Math.max(Number(page) || 1, 1);
-  const offset = (currentPage - 1) * cappedLimit;
+  const skip = (currentPage - 1) * cappedLimit;
 
-  const { rows, count } = await Order.findAndCountAll({
-    order: [['createdAt', 'DESC']],
-    limit: cappedLimit,
-    offset,
-  });
+  const [orders, count] = await Promise.all([
+    Order.find({}).sort({ createdAt: -1 }).skip(skip).limit(cappedLimit),
+    Order.countDocuments(),
+  ]);
 
-  const doc = rows.map((order) => ({
+  const doc = orders.map((order) => ({
     ref: order.reference,
     client: `${order.shippingFirstName} ${order.shippingLastName}`,
-    value: Number(order.total),
+    value: order.total,
     currency: order.currency,
-    status: order.status === ORDER_STATUS.DELIVERED
-      ? ADMIN_ORDER_QUEUE_STATUS.FULFILLED
-      : ADMIN_ORDER_QUEUE_STATUS.PENDING,
+    status: order.status,
+    createdAt: order.createdAt,
   }));
 
   return { doc, meta: { totalRecords: count, page: currentPage, limit: cappedLimit } };
 };
 
-module.exports = { list };
+const get = async (orderId) => {
+  if (invalidId(orderId)) return { errors: [{ name: 'order', message: 'Order not found.' }] };
+  const order = await Order.findById(orderId);
+  if (!order) {
+    return { errors: [{ name: 'order', message: 'Order not found.' }] };
+  }
+  return { doc: order };
+};
+
+const updateStatus = async (orderId, { status, note }) => {
+  if (invalidId(orderId)) return { errors: [{ name: 'order', message: 'Order not found.' }] };
+  const order = await Order.findById(orderId);
+  if (!order) {
+    return { errors: [{ name: 'order', message: 'Order not found.' }] };
+  }
+  order.status = status;
+  order.statusHistory.push({ status, note: note || '' });
+  await order.save();
+  return { doc: order };
+};
+
+module.exports = { list, get, updateStatus };

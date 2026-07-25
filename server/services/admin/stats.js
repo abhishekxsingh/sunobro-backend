@@ -1,4 +1,3 @@
-const { Op } = require('sequelize');
 const { Order } = require('../../database/models');
 const { PAID_ORDER_STATUSES, ACTIVE_ORDER_STATUSES } = require('../../utils/constant');
 
@@ -11,18 +10,19 @@ const pctChange = (current, previous) => {
 };
 
 const windowStats = async (from, to) => {
-  const [revenue, created, paid] = await Promise.all([
-    Order.sum('total', {
-      where: { status: { [Op.in]: PAID_ORDER_STATUSES }, createdAt: { [Op.gte]: from, [Op.lt]: to } },
-    }),
-    Order.count({ where: { createdAt: { [Op.gte]: from, [Op.lt]: to } } }),
-    Order.count({
-      where: { status: { [Op.in]: PAID_ORDER_STATUSES }, createdAt: { [Op.gte]: from, [Op.lt]: to } },
-    }),
+  const [revenueAgg, created, paid] = await Promise.all([
+    Order.aggregate([
+      { $match: { status: { $in: PAID_ORDER_STATUSES }, createdAt: { $gte: from, $lt: to } } },
+      { $group: { _id: null, total: { $sum: '$total' } } },
+    ]),
+    Order.countDocuments({ createdAt: { $gte: from, $lt: to } }),
+    Order.countDocuments({ status: { $in: PAID_ORDER_STATUSES }, createdAt: { $gte: from, $lt: to } }),
   ]);
 
+  const revenue = revenueAgg[0]?.total || 0;
+
   return {
-    revenue: Number(revenue || 0),
+    revenue,
     conversionRatePct: created === 0 ? 0 : Number(((paid / created) * 100).toFixed(1)),
   };
 };
@@ -38,7 +38,7 @@ const get = async () => {
   const [current, previous, activeOrders] = await Promise.all([
     windowStats(oneDayAgo, now),
     windowStats(twoDaysAgo, oneDayAgo),
-    Order.count({ where: { status: { [Op.in]: ACTIVE_ORDER_STATUSES } } }),
+    Order.countDocuments({ status: { $in: ACTIVE_ORDER_STATUSES } }),
   ]);
 
   return {

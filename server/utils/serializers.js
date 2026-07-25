@@ -46,6 +46,50 @@ const toOrderDTO = (order) => ({
   estimatedArrival: order.estimatedArrival || undefined,
 });
 
+const toVariantDTO = (variant) => ({
+  id: variant.id || variant._id,
+  productId: variant.productId,
+  size: variant.size,
+  color: variant.color,
+  sku: variant.sku,
+  stock: variant.stock,
+  price: variant.price ?? null,
+  qikinkSku: variant.qikinkSku ?? null,
+});
+
+const toCustomerVariantDTO = (variant) => ({
+  id: variant.id || variant._id,
+  size: variant.size,
+  color: variant.color,
+  sku: variant.sku,
+  stock: variant.stock,
+  price: variant.price ?? null,
+});
+
+const toProductWithVariantsDTO = (product, variants = []) => ({
+  ...toProductDTO(product),
+  variants: Array.isArray(variants) ? variants.map(toCustomerVariantDTO) : [],
+});
+
+const toFullProductDTO = (product, variants = []) => ({
+  ...toProductDTO(product),
+  status: product.status,
+  variantCount: product.variantCount ?? variants.length,
+  totalStock: product.totalStock ?? variants.reduce((sum, v) => sum + v.stock, 0),
+  qikinkSynced: product.qikinkSynced ?? variants.every((v) => Boolean(v.qikinkSku)),
+  variants: variants.map ? variants.map(toVariantDTO) : [],
+  createdAt: product.createdAt,
+  updatedAt: product.updatedAt,
+});
+
 module.exports = {
-  toAdminDTO, toCustomerDTO, toProductDTO, toOrderItemDTO, toOrderDTO,
+  toAdminDTO,
+  toCustomerDTO,
+  toProductDTO,
+  toOrderItemDTO,
+  toOrderDTO,
+  toCustomerVariantDTO,
+  toProductWithVariantsDTO,
+  toVariantDTO,
+  toFullProductDTO,
 };
