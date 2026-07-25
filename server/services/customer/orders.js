@@ -1,6 +1,7 @@
-const { Order, ProductVariant, Product } = require('../../database/models');
+const { Order, ProductVariant, Product, Customer } = require('../../database/models');
 const orderReference = require('../../utils/order-reference');
 const { PAGINATION } = require('../../utils/constant');
+const emailService = require('../email');
 
 const SHIPPING_FEE = 0;
 const TAX_RATE = 0;
@@ -86,6 +87,7 @@ const create = async ({ items, shipping }, customerId) => {
         tax,
         total,
         currency,
+        shippingEmail: shipping.email || null,
         shippingFirstName: shipping.firstName,
         shippingLastName: shipping.lastName,
         shippingStreet: shipping.street,
@@ -112,6 +114,13 @@ const create = async ({ items, shipping }, customerId) => {
 
   if (!order) {
     throw new Error('Could not allocate an order reference. Try again.');
+  }
+
+  // Send confirmation email — fire-and-forget, never blocks the response.
+  const toEmail = order.shippingEmail
+    || (customerId ? (await Customer.findById(customerId).select('email').lean())?.email : null);
+  if (toEmail) {
+    emailService.sendOrderConfirmation({ to: toEmail, order }).catch(() => {});
   }
 
   return { doc: order };

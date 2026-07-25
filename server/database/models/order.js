@@ -29,6 +29,7 @@ const orderSchema = new Schema({
   tax: { type: Number, default: 0 },
   total: { type: Number, required: true },
   currency: { type: String, maxlength: 3, default: 'INR' },
+  shippingEmail: { type: String },
   shippingFirstName: { type: String, required: true },
   shippingLastName: { type: String, required: true },
   shippingStreet: { type: String, required: true },

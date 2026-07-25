@@ -2,6 +2,7 @@ const { Customer } = require('../../database/models');
 const password = require('../../utils/password');
 const jwt = require('../../utils/jwt');
 const { TOKEN_TYPE } = require('../../utils/constant');
+const emailService = require('../email');
 
 const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.';
 const DUPLICATE_EMAIL_MESSAGE = 'An account with this email already exists.';
@@ -31,6 +32,8 @@ const register = async (payload) => {
   }
 
   const token = jwt.sign({ type: TOKEN_TYPE.CUSTOMER, sub: customer.id });
+
+  emailService.sendWelcome({ to: customer.email, name: customer.name }).catch(() => {});
 
   return { doc: { customer, token } };
 };
