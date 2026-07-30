@@ -6,7 +6,7 @@ const setSessionCookie = (res, name, token) => {
   res.cookie(name, token, {
     httpOnly: true,
     secure: NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: COOKIE_MAX_AGE_MS,
   });
 };
@@ -15,7 +15,7 @@ const clearSessionCookie = (res, name) => {
   res.clearCookie(name, {
     httpOnly: true,
     secure: NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: NODE_ENV === 'production' ? 'none' : 'lax',
   });
 };
 
