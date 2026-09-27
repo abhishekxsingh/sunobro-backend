@@ -13,13 +13,31 @@ const attachResponseHelpers = require('./utils/middleware/http');
 const logger = require('./utils/logger');
 const routes = require('./routes');
 
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1)$/;
+const PRIVATE_HOST = /^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/;
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (CORS_ORIGINS.includes(origin)) return true;
+  let url;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (LOCAL_HOST.test(url.hostname) || PRIVATE_HOST.test(url.hostname)) return true;
+  return url.protocol === 'https:' && url.hostname.endsWith('.azurewebsites.net');
+};
+
 const app = express();
 
 app.enable('trust proxy');
 app.use(correlationId);
 app.use(attachResponseHelpers);
 app.use(cors({
-  origin: CORS_ORIGINS.length > 0 ? CORS_ORIGINS : false,
+  origin(origin, callback) {
+    callback(null, isAllowedOrigin(origin));
+  },
   credentials: true,
 }));
 app.use(compression());
