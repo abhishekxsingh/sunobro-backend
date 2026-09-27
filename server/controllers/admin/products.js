@@ -38,7 +38,7 @@ const create = async (req, res) => {
     if (validationErrors) return res.badRequest('field-validation', validationErrors);
 
     const result = await AdminProductsService.create(req.body);
-    if (result.type === 'conflict') return res.conflict(result.errors);
+    if (result.type === 'conflict') return res.conflict('conflict', result.errors);
     if (result.errors) return res.badRequest('field-validation', result.errors);
 
     return res.postSuccessfully(result.doc);
@@ -55,7 +55,8 @@ const update = async (req, res) => {
     });
     if (validationErrors) return res.badRequest('field-validation', validationErrors);
 
-    const { doc, errors } = await AdminProductsService.update(req.params.id, req.body);
+    const { doc, errors, type } = await AdminProductsService.update(req.params.id, req.body);
+    if (type === 'conflict') return res.conflict('conflict', errors);
     if (errors) return res.notFound();
     return res.getRequest(doc);
   } catch (error) {

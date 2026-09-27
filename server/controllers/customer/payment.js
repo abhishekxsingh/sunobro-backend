@@ -1,14 +1,28 @@
 const PaymentService = require('../../services/customer/payment');
+const Schemas = require('../../dto-schemas');
+const Validator = require('../../utils/validator');
 
 const createOrder = async (req, res) => {
   try {
-    const { doc } = await PaymentService.createOrder(req.body);
+    const { errors: validationErrors } = Validator.isSchemaValid({
+      data: req.body,
+      schema: Schemas.customer.payments.create,
+    });
+    if (validationErrors) return res.badRequest('field-validation', validationErrors);
 
-    if (!doc) {
-      return res.notImplemented();
+    const result = await PaymentService.createOrder(req.body);
+
+    if (result.type === 'not-configured') {
+      return res.badRequest('not-configured', result.errors);
+    }
+    if (result.type === 'conflict') {
+      return res.conflict('payment-conflict', result.errors);
+    }
+    if (result.errors) {
+      return res.badRequest('field-validation', result.errors);
     }
 
-    return res.getRequest(doc);
+    return res.getRequest(result.doc);
   } catch (error) {
     return res.serverError(error);
   }
@@ -16,13 +30,25 @@ const createOrder = async (req, res) => {
 
 const verify = async (req, res) => {
   try {
-    const { doc } = await PaymentService.verify(req.body);
+    const { errors: validationErrors } = Validator.isSchemaValid({
+      data: req.body,
+      schema: Schemas.customer.payments.verify,
+    });
+    if (validationErrors) return res.badRequest('field-validation', validationErrors);
 
-    if (!doc) {
-      return res.notImplemented();
+    const result = await PaymentService.verify(req.body);
+
+    if (result.type === 'not-configured') {
+      return res.badRequest('not-configured', result.errors);
+    }
+    if (result.type === 'conflict') {
+      return res.conflict('payment-conflict', result.errors);
+    }
+    if (result.errors) {
+      return res.badRequest('field-validation', result.errors);
     }
 
-    return res.getRequest(doc);
+    return res.getRequest(result.doc);
   } catch (error) {
     return res.serverError(error);
   }

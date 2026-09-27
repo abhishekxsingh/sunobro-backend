@@ -6,6 +6,7 @@ const orderItemSchema = new Schema({
   size: { type: String, required: true },
   color: { type: String, required: true },
   sku: { type: String, required: true },
+  qikinkSku: { type: String },
   price: { type: Number, required: true },
   qty: { type: Number, required: true },
 }, { _id: false });
@@ -30,16 +31,24 @@ const orderSchema = new Schema({
   total: { type: Number, required: true },
   currency: { type: String, maxlength: 3, default: 'INR' },
   shippingEmail: { type: String },
+  shippingPhone: { type: String },
   shippingFirstName: { type: String, required: true },
   shippingLastName: { type: String, required: true },
   shippingStreet: { type: String, required: true },
   shippingCity: { type: String, required: true },
+  shippingState: { type: String },
   shippingPostalCode: { type: String, required: true },
   shippingCountry: { type: String, required: true },
   destination: { type: String },
   estimatedArrival: { type: String },
   items: { type: [orderItemSchema], default: [] },
   statusHistory: { type: [statusHistorySchema], default: [] },
+  paymentGateway: { type: String, default: 'razorpay' },
+  razorpayOrderId: { type: String },
+  razorpayPaymentId: { type: String },
+  qikinkOrderId: { type: String },
+  qikinkStatus: { type: String },
+  qikinkError: { type: String },
 }, { timestamps: true });
 
 module.exports = model('Order', orderSchema);

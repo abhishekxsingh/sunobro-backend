@@ -16,10 +16,10 @@ module.exports = {
   JWT_SECRET: process.env.JWT_SECRET,
   ADMIN_SESSION_COOKIE: process.env.ADMIN_SESSION_COOKIE || 'sb_admin_session',
   CUSTOMER_SESSION_COOKIE: process.env.CUSTOMER_SESSION_COOKIE || 'sb_session',
-  CASHFREE: {
-    APP_ID: process.env.CASHFREE_APP_ID || '',
-    SECRET_KEY: process.env.CASHFREE_SECRET_KEY || '',
-    ENV: process.env.CASHFREE_ENV || 'sandbox',
+  RAZORPAY: {
+    KEY_ID: process.env.RAZORPAY_KEY_ID || '',
+    KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
+    WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
   QIKINK: {
     CLIENT_ID: process.env.QIKINK_CLIENT_ID || '',

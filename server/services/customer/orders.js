@@ -88,12 +88,15 @@ const create = async ({ items, shipping }, customerId) => {
         total,
         currency,
         shippingEmail: shipping.email || null,
+        shippingPhone: shipping.phone || null,
         shippingFirstName: shipping.firstName,
         shippingLastName: shipping.lastName,
         shippingStreet: shipping.street,
         shippingCity: shipping.city,
+        shippingState: shipping.state || null,
         shippingPostalCode: shipping.postalCode,
         shippingCountry: shipping.country,
+        destination: [shipping.city, shipping.state, shipping.country].filter(Boolean).join(', '),
         items: resolvedItems.map(({
           variant, product, price, qty,
         }) => ({
@@ -102,6 +105,7 @@ const create = async ({ items, shipping }, customerId) => {
           size: variant.size,
           color: variant.color,
           sku: variant.sku,
+          qikinkSku: variant.qikinkSku || undefined,
           price,
           qty,
         })),

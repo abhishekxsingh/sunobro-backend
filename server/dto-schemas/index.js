@@ -5,6 +5,8 @@ const adminOrdersUpdateStatus = require('./admin/orders/updateStatus');
 const customerAuthRegister = require('./customer/auth/register');
 const customerAuthLogin = require('./customer/auth/login');
 const customerOrdersSave = require('./customer/orders/save');
+const customerPaymentsCreate = require('./customer/payments/create');
+const customerPaymentsVerify = require('./customer/payments/verify');
 
 module.exports = {
   admin: {
@@ -15,5 +17,6 @@ module.exports = {
   customer: {
     auth: { register: customerAuthRegister, login: customerAuthLogin },
     orders: { save: customerOrdersSave },
+    payments: { create: customerPaymentsCreate, verify: customerPaymentsVerify },
   },
 };

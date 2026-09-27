@@ -1,8 +1,14 @@
 const { Resend } = require('resend');
 const logger = require('../utils/logger');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.FROM_EMAIL || 'SunoBro <orders@sunobro.com>';
+
+let resendClient = null;
+const getResend = () => {
+  if (!process.env.RESEND_API_KEY) return null;
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
+};
 
 const money = (n, cur = 'INR') => `${cur === 'INR' ? '₹' : '$'}${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
@@ -72,6 +78,8 @@ const sendOrderConfirmation = async ({ to, order }) => {
   </div></body></html>`;
 
   try {
+    const resend = getResend();
+    if (!resend) return;
     await resend.emails.send({
       from: FROM,
       to,
@@ -104,6 +112,8 @@ const sendWelcome = async ({ to, name }) => {
   </div></body></html>`;
 
   try {
+    const resend = getResend();
+    if (!resend) return;
     await resend.emails.send({
       from: FROM,
       to,

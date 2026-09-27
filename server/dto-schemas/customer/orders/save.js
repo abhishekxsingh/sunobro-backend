@@ -9,7 +9,7 @@ const orderLineItem = {
     price: { type: 'number' },
     qty: { type: 'integer', minimum: 1 },
   },
-  required: ['productId', 'sku', 'qty'],
+  required: ['sku', 'qty'],
   additionalProperties: true,
 };
 
@@ -20,8 +20,11 @@ const shippingAddress = {
     lastName: { type: 'string', minLength: 1 },
     street: { type: 'string', minLength: 1 },
     city: { type: 'string', minLength: 1 },
+    state: { type: 'string' },
     postalCode: { type: 'string', minLength: 1 },
     country: { type: 'string', minLength: 1 },
+    email: { type: 'string' },
+    phone: { type: 'string' },
   },
   required: ['firstName', 'lastName', 'street', 'city', 'postalCode', 'country'],
   additionalProperties: true,
