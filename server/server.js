@@ -23,7 +23,13 @@ app.use(cors({
   credentials: true,
 }));
 app.use(compression());
-app.use(helmet());
+app.use(helmet({
+  // Storefront and admin call this API from another origin. Helmet's default
+  // same-origin policy makes the browser fail those fetches.
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  // Razorpay Checkout opens a payment window.
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+}));
 app.use(cookieParser());
 app.use(express.json());
 
