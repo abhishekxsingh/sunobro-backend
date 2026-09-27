@@ -17,8 +17,8 @@ module.exports = {
   ADMIN_SESSION_COOKIE: process.env.ADMIN_SESSION_COOKIE || 'sb_admin_session',
   CUSTOMER_SESSION_COOKIE: process.env.CUSTOMER_SESSION_COOKIE || 'sb_session',
   RAZORPAY: {
-    KEY_ID: process.env.RAZORPAY_KEY_ID || '',
-    KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
+    KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_live_TPuJb9rvL5n6bY',
+    KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'zYopewN0OGJoJ4G8btkUe35o',
     WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
   QIKINK: {
