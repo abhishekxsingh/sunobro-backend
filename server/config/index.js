@@ -22,8 +22,8 @@ module.exports = {
     WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
   QIKINK: {
-    CLIENT_ID: process.env.QIKINK_CLIENT_ID || '',
-    CLIENT_SECRET: process.env.QIKINK_CLIENT_SECRET || '',
-    ENV: process.env.QIKINK_ENV || 'sandbox',
+    CLIENT_ID: '909927305150864',
+    CLIENT_SECRET: '05bebcdebfd4f78ea99999c1283ce3917b925bd3bcf0c6881d161583841bde10',
+    ENV: 'live',
   },
 };

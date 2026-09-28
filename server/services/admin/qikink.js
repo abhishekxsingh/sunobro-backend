@@ -2,17 +2,72 @@ const { Product, ProductVariant } = require('../../database/models');
 const { QIKINK } = require('../../config');
 const logger = require('../../utils/logger');
 
-const baseUrl = () => (
-  QIKINK.ENV === 'live'
-    ? 'https://api.qikink.com'
-    : 'https://sandbox.qikink.com'
-);
+const USER_AGENT = 'SunoBro/1.0';
+
+const baseUrl = () => 'https://api.qikink.com';
 
 let cachedToken = null;
-let cachedTokenAt = 0;
-const TOKEN_TTL_MS = 50 * 60 * 1000;
+let cachedTokenUntil = 0;
 
 const isConfigured = () => Boolean(QIKINK.CLIENT_ID && QIKINK.CLIENT_SECRET);
+
+const qikinkMessage = (data, status) => (
+  data?.error
+  || data?.message
+  || `Qikink request failed (${status})`
+);
+
+const request = async (path, { method = 'GET', headers = {}, body } = {}) => {
+  const res = await fetch(`${baseUrl()}${path}`, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': USER_AGENT,
+      ...headers,
+    },
+    body,
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+};
+
+const getAccessToken = async (force = false) => {
+  if (!isConfigured()) {
+    throw new Error('Qikink credentials are not configured.');
+  }
+
+  if (!force && cachedToken && Date.now() < cachedTokenUntil) {
+    return cachedToken;
+  }
+
+  const body = new URLSearchParams();
+  body.append('ClientId', QIKINK.CLIENT_ID);
+  body.append('client_secret', QIKINK.CLIENT_SECRET);
+
+  const { res, data } = await request('/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+
+  if (!res.ok || !data?.Accesstoken || data?.error) {
+    throw new Error(qikinkMessage(data, res.status));
+  }
+
+  const ttlSeconds = Number(data.expires_in) || 3600;
+  cachedToken = data.Accesstoken;
+  cachedTokenUntil = Date.now() + Math.max((ttlSeconds - 60) * 1000, 30_000);
+  return cachedToken;
+};
+
+const qikinkHeaders = async () => {
+  const token = await getAccessToken();
+  return {
+    'Content-Type': 'application/json',
+    ClientId: QIKINK.CLIENT_ID,
+    Accesstoken: token,
+  };
+};
 
 const getStatus = async () => {
   if (!isConfigured()) {
@@ -35,44 +90,6 @@ const getStatus = async () => {
       message: err.message || 'Could not authenticate with Qikink.',
     };
   }
-};
-
-const getAccessToken = async (force = false) => {
-  if (!isConfigured()) {
-    throw new Error('Qikink credentials are not configured.');
-  }
-
-  if (!force && cachedToken && Date.now() - cachedTokenAt < TOKEN_TTL_MS) {
-    return cachedToken;
-  }
-
-  const body = new URLSearchParams();
-  body.append('ClientId', QIKINK.CLIENT_ID);
-  body.append('client_secret', QIKINK.CLIENT_SECRET);
-
-  const res = await fetch(`${baseUrl()}/api/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.Accesstoken) {
-    throw new Error(data?.message || data?.error || `Qikink auth failed (${res.status})`);
-  }
-
-  cachedToken = data.Accesstoken;
-  cachedTokenAt = Date.now();
-  return cachedToken;
-};
-
-const qikinkHeaders = async () => {
-  const token = await getAccessToken();
-  return {
-    'Content-Type': 'application/json',
-    ClientId: QIKINK.CLIENT_ID,
-    Accesstoken: token,
-  };
 };
 
 /**
@@ -138,6 +155,28 @@ const syncAll = async () => {
   return { synced, message: messages.join(' | ') || 'No products.' };
 };
 
+const toOrderNumber = (reference, id) => {
+  const raw = String(reference || id || '')
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  return (raw || 'SBORDER').slice(0, 15);
+};
+
+const splitStreet = (street) => {
+  const text = String(street || '').trim();
+  return {
+    address1: text.slice(0, 90),
+    address2: text.slice(90, 180),
+  };
+};
+
+const countryCodeOf = (country) => {
+  const raw = String(country || 'IN').trim();
+  if (raw.toLowerCase().includes('india') || raw.toLowerCase() === 'in') return 'IN';
+  return raw.slice(0, 2).toUpperCase();
+};
+
 const createOrderFromPaidOrder = async (order) => {
   if (!isConfigured()) {
     return {
@@ -153,7 +192,7 @@ const createOrderFromPaidOrder = async (order) => {
   const lineItems = [];
   for (let i = 0; i < (order.items || []).length; i += 1) {
     const item = order.items[i];
-    let qikinkSku = item.qikinkSku;
+    let { qikinkSku } = item;
     if (!qikinkSku) {
       // eslint-disable-next-line no-await-in-loop
       const variant = await ProductVariant.findOne({ sku: item.sku });
@@ -161,19 +200,14 @@ const createOrderFromPaidOrder = async (order) => {
     }
     lineItems.push({
       search_from_my_products: 1,
-      sku: qikinkSku,
+      sku: String(qikinkSku).slice(0, 50),
       quantity: String(item.qty),
       price: String(Math.round(item.price)),
     });
   }
 
-  const countryRaw = (order.shippingCountry || 'IN').trim();
-  let countryCode = countryRaw.slice(0, 2).toUpperCase();
-  if (countryRaw.toLowerCase().includes('india') || countryRaw.toLowerCase() === 'in') {
-    countryCode = 'IN';
-  }
-
-  const orderNumber = String(order.reference || order.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
+  const { address1, address2 } = splitStreet(order.shippingStreet);
+  const orderNumber = toOrderNumber(order.reference, order.id);
   const payload = {
     order_number: orderNumber,
     qikink_shipping: '1',
@@ -182,37 +216,40 @@ const createOrderFromPaidOrder = async (order) => {
     line_items: lineItems,
     shipping_address: {
       first_name: order.shippingFirstName,
-      last_name: order.shippingLastName,
-      address1: order.shippingStreet,
-      address2: '',
+      last_name: order.shippingLastName || '',
+      address1,
+      address2,
       phone: order.shippingPhone || '9999999999',
       email: order.shippingEmail || 'orders@sunobro.com',
       city: order.shippingCity,
       zip: order.shippingPostalCode,
       province: order.shippingState || order.shippingCity,
-      country_code: countryCode,
+      country_code: countryCodeOf(order.shippingCountry),
     },
   };
 
   try {
     const headers = await qikinkHeaders();
-    const res = await fetch(`${baseUrl()}/api/order`, {
+    const { res, data } = await request('/api/order/create', {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
     });
-    const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      const errMsg = data?.message || data?.error || JSON.stringify(data) || `HTTP ${res.status}`;
+    const created = res.ok
+      && data?.order_id
+      && !data?.error
+      && String(data.status_code || '200') === '200';
+
+    if (!created) {
+      const errMsg = qikinkMessage(data, res.status);
       logger.error({ data, orderId: order.id }, 'qikink-create-order-failed');
       return { error: errMsg };
     }
 
-    const qikinkId = data?.order_id || data?.id || data?.Order_Id || data?.orderId;
     return {
-      orderId: qikinkId || orderNumber,
-      status: data?.status || 'submitted',
+      orderId: String(data.order_id),
+      status: 'created',
       raw: data,
     };
   } catch (err) {
