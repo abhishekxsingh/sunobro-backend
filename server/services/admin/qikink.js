@@ -190,20 +190,31 @@ const createOrderFromPaidOrder = async (order) => {
   }
 
   const lineItems = [];
+  const missingSkus = [];
   for (let i = 0; i < (order.items || []).length; i += 1) {
     const item = order.items[i];
     let { qikinkSku } = item;
-    if (!qikinkSku) {
+    if (!qikinkSku && item.sku) {
       // eslint-disable-next-line no-await-in-loop
       const variant = await ProductVariant.findOne({ sku: item.sku });
-      qikinkSku = variant?.qikinkSku || item.sku;
+      qikinkSku = variant?.qikinkSku;
     }
-    lineItems.push({
-      search_from_my_products: 1,
-      sku: String(qikinkSku).slice(0, 50),
-      quantity: String(item.qty),
-      price: String(Math.round(item.price)),
-    });
+    if (!qikinkSku) {
+      missingSkus.push(item.sku || item.name || `item ${i + 1}`);
+    } else {
+      lineItems.push({
+        search_from_my_products: 1,
+        sku: String(qikinkSku).slice(0, 50),
+        quantity: String(item.qty),
+        price: String(Math.round(item.price)),
+      });
+    }
+  }
+
+  if (missingSkus.length > 0) {
+    return {
+      error: `Qikink SKU is not set for: ${missingSkus.join(', ')}. Set qikinkSku on the variant.`,
+    };
   }
 
   const { address1, address2 } = splitStreet(order.shippingStreet);
