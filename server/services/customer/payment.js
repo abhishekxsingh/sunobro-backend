@@ -36,6 +36,7 @@ const markPaidAndFulfill = async (order, paymentId) => {
     const qikinkResult = await QikinkService.createOrderFromPaidOrder(order);
     if (qikinkResult?.orderId) {
       order.qikinkOrderId = String(qikinkResult.orderId);
+      order.qikinkOrderNumber = qikinkResult.orderNumber || order.qikinkOrderNumber;
       order.qikinkStatus = qikinkResult.status || 'submitted';
       order.qikinkError = undefined;
       order.statusHistory.push({

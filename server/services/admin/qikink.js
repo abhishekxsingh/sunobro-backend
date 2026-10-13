@@ -260,6 +260,7 @@ const createOrderFromPaidOrder = async (order) => {
 
     return {
       orderId: String(data.order_id),
+      orderNumber,
       status: 'created',
       raw: data,
     };
@@ -269,10 +270,102 @@ const createOrderFromPaidOrder = async (order) => {
   }
 };
 
+const SHIPPED_STATUSES = new Set([
+  'in-transit',
+  'out for delivery',
+  'picked up',
+  'manifested',
+  'dispatch ready',
+  'delivery rescheduled',
+]);
+
+const storeStatusFromQikink = (qikinkStatus, current) => {
+  const label = String(qikinkStatus || '').trim().toLowerCase();
+  if (label === 'delivered') return 'delivered';
+  if (label === 'cancelled') return 'cancelled';
+  if (SHIPPED_STATUSES.has(label)) {
+    if (current === 'delivered' || current === 'cancelled') return current;
+    return 'shipped';
+  }
+  return current;
+};
+
+const listOrders = async (query = {}) => {
+  const headers = await qikinkHeaders();
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value) !== '') {
+      params.set(key, String(value));
+    }
+  });
+  const qs = params.toString();
+  const { res, data } = await request(`/api/order/list${qs ? `?${qs}` : ''}`, { headers });
+  if (!res.ok || data?.success === false) {
+    throw new Error(qikinkMessage(data, res.status));
+  }
+  return Array.isArray(data?.data) ? data.data : [];
+};
+
+const applyQikinkRow = (order, row) => {
+  // Mongoose documents are updated in place, then saved by the caller.
+  /* eslint-disable no-param-reassign */
+  const shipping = row.shipping || {};
+  const nextStatus = storeStatusFromQikink(row.status, order.status);
+  order.qikinkOrderId = row.order_id ? String(row.order_id) : order.qikinkOrderId;
+  order.qikinkStatus = row.status || order.qikinkStatus;
+  order.qikinkAwb = shipping.awb || order.qikinkAwb;
+  order.qikinkTrackingLink = shipping.tracking_link || order.qikinkTrackingLink;
+  order.qikinkCourier = shipping.courier_provider_name
+    ? String(shipping.courier_provider_name).trim()
+    : order.qikinkCourier;
+  if (nextStatus !== order.status) {
+    order.status = nextStatus;
+    order.statusHistory.push({
+      status: nextStatus,
+      note: `Qikink status: ${row.status}`,
+    });
+  }
+  /* eslint-enable no-param-reassign */
+};
+
+const syncOrder = async (order) => {
+  if (!order || !isConfigured()) return order;
+  const canLookup = order.qikinkOrderId
+    || order.qikinkOrderNumber
+    || order.status === 'paid'
+    || order.status === 'shipped'
+    || order.status === 'delivered';
+  if (!canLookup || order.status === 'pending') return order;
+
+  const query = order.qikinkOrderId
+    ? { id: order.qikinkOrderId }
+    : { order_reference_no: order.qikinkOrderNumber || toOrderNumber(order.reference, order.id) };
+
+  try {
+    const rows = await listOrders(query);
+    if (rows[0]) {
+      applyQikinkRow(order, rows[0]);
+      await order.save();
+    }
+  } catch (err) {
+    logger.error({ err, orderId: order.id }, 'qikink-order-list-failed');
+  }
+  return order;
+};
+
+const syncOrders = async (orders) => {
+  const targets = (orders || []).filter((order) => order.status !== 'pending').slice(0, 10);
+  await Promise.all(targets.map((order) => syncOrder(order)));
+  return orders;
+};
+
 module.exports = {
   getStatus,
   syncProduct,
   syncAll,
   createOrderFromPaidOrder,
+  listOrders,
+  syncOrder,
+  syncOrders,
   isConfigured,
 };

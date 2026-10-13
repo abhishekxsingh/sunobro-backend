@@ -44,6 +44,23 @@ const toOrderDTO = (order) => ({
   createdAt: order.createdAt,
   destination: order.destination || undefined,
   estimatedArrival: order.estimatedArrival || undefined,
+  qikinkOrderId: order.qikinkOrderId || null,
+  qikinkStatus: order.qikinkStatus || null,
+  qikinkError: order.qikinkError || null,
+  trackingLink: order.qikinkTrackingLink || null,
+  awb: order.qikinkAwb || null,
+  courier: order.qikinkCourier || null,
+  shipping: {
+    firstName: order.shippingFirstName,
+    lastName: order.shippingLastName,
+    street: order.shippingStreet,
+    city: order.shippingCity,
+    state: order.shippingState || null,
+    postalCode: order.shippingPostalCode,
+    country: order.shippingCountry,
+    email: order.shippingEmail || null,
+    phone: order.shippingPhone || null,
+  },
 });
 
 const toVariantDTO = (variant) => ({

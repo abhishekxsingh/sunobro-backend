@@ -47,8 +47,12 @@ const orderSchema = new Schema({
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
   qikinkOrderId: { type: String },
+  qikinkOrderNumber: { type: String },
   qikinkStatus: { type: String },
   qikinkError: { type: String },
+  qikinkAwb: { type: String },
+  qikinkTrackingLink: { type: String },
+  qikinkCourier: { type: String },
 }, { timestamps: true });
 
 module.exports = model('Order', orderSchema);

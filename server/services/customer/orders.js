@@ -1,7 +1,10 @@
-const { Order, ProductVariant, Product, Customer } = require('../../database/models');
+const {
+  Order, ProductVariant, Product, Customer,
+} = require('../../database/models');
 const orderReference = require('../../utils/order-reference');
 const { PAGINATION } = require('../../utils/constant');
 const emailService = require('../email');
+const QikinkService = require('../admin/qikink');
 
 const SHIPPING_FEE = 0;
 const TAX_RATE = 0;
@@ -136,6 +139,7 @@ const get = async (id) => {
     return { errors: [{ name: 'order', message: 'Order not found.' }] };
   }
 
+  await QikinkService.syncOrder(order);
   return { doc: order };
 };
 
@@ -149,6 +153,7 @@ const listMine = async (customerId, { page = 1, limit = PAGINATION.DEFAULT_LIMIT
     Order.countDocuments({ customerId }),
   ]);
 
+  await QikinkService.syncOrders(orders);
   return { doc: orders, meta: { totalRecords: count, page: currentPage, limit: cappedLimit } };
 };
 

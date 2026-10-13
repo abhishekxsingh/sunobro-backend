@@ -35,6 +35,12 @@ const get = async (req, res) => {
       createdAt: doc.createdAt,
       shippingCity: doc.shippingCity,
       shippingCountry: doc.shippingCountry,
+      qikinkOrderId: doc.qikinkOrderId || null,
+      qikinkStatus: doc.qikinkStatus || null,
+      qikinkError: doc.qikinkError || null,
+      trackingLink: doc.qikinkTrackingLink || null,
+      awb: doc.qikinkAwb || null,
+      courier: doc.qikinkCourier || null,
     });
   } catch (error) {
     return res.serverError(error);
