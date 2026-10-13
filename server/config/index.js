@@ -23,7 +23,7 @@ module.exports = {
   },
   QIKINK: {
     CLIENT_ID: '909927305150864',
-    CLIENT_SECRET: '05bebcdebfd4f78ea99999c1283ce3917b925bd3bcf0c6881d161583841bde10',
+    CLIENT_SECRET: 'b20cf47796d977fe0ffc2b9249625c94705dd15522ee617df91a395304bcb25e',
     ENV: 'live',
   },
 };
