@@ -5,12 +5,34 @@ const toAdminDTO = (admin) => ({
   role: admin.role,
 });
 
-const toCustomerDTO = (customer) => ({
-  id: customer.id,
-  name: customer.name,
-  email: customer.email,
-  phone: customer.phone,
+const toAddressDTO = (address) => ({
+  id: address.id,
+  label: address.label || 'Home',
+  firstName: address.firstName,
+  lastName: address.lastName,
+  phone: address.phone,
+  street: address.street,
+  city: address.city,
+  state: address.state || '',
+  postalCode: address.postalCode,
+  country: address.country || 'India',
+  isDefault: Boolean(address.isDefault),
 });
+
+const toCustomerDTO = (customer) => {
+  let authMethod = 'password';
+  if (customer.firebaseUid && customer.passwordHash) authMethod = 'both';
+  else if (customer.firebaseUid) authMethod = 'google';
+
+  return {
+    id: customer.id,
+    name: customer.name,
+    email: customer.email,
+    phone: customer.phone || '',
+    authMethod,
+    addresses: (customer.addresses || []).map(toAddressDTO),
+  };
+};
 
 const toProductDTO = (product) => ({
   id: product.id,

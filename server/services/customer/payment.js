@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const { Order } = require('../../database/models');
 const { RAZORPAY } = require('../../config');
 const QikinkService = require('../admin/qikink');
+const emailService = require('../email');
 const logger = require('../../utils/logger');
 
 const getClient = () => {
@@ -58,6 +59,12 @@ const markPaidAndFulfill = async (order, paymentId) => {
     logger.error({ err, orderId: paid.id }, 'qikink-fulfill-failed');
     return paid;
   }
+
+  if (order.shippingEmail) {
+    emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
+  }
+
+  return order;
 };
 
 const createOrder = async ({ orderId }) => {

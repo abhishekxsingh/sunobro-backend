@@ -1,5 +1,6 @@
 const { Order, Product, ProductVariant } = require('../../database/models');
 const { QIKINK } = require('../../config');
+const emailService = require('../email');
 const logger = require('../../utils/logger');
 const {
   isConfigured, qikinkMessage, request, getAccessToken, qikinkHeaders, listOrders,
@@ -293,6 +294,8 @@ const applyQikinkRow = (order, row) => {
   order.qikinkCourier = shipping.courier_provider_name
     ? String(shipping.courier_provider_name).trim()
     : order.qikinkCourier;
+  const changed = nextStatus !== order.status;
+  if (changed) {
   order.qikinkError = undefined;
   if (nextStatus !== order.status || (row.status && row.status !== previousLabel)) {
     order.status = nextStatus;
@@ -302,6 +305,7 @@ const applyQikinkRow = (order, row) => {
     });
   }
   /* eslint-enable no-param-reassign */
+  return changed;
 };
 
 /**
@@ -349,6 +353,13 @@ const fulfillOrder = async (orderId) => {
   }
 
   try {
+    const rows = await listOrders(query);
+    if (rows[0]) {
+      const changed = applyQikinkRow(order, rows[0]);
+      await order.save();
+      if (changed && order.shippingEmail) {
+        emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
+      }
     const existing = order.qikinkAttempts > 1 ? await findExistingRemoteOrder(order) : null;
     if (existing) {
       applyQikinkRow(order, existing);

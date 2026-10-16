@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { Order } = require('../../database/models');
 const { PAGINATION } = require('../../utils/constant');
 const QikinkService = require('./qikink');
+const emailService = require('../email');
 const CustomerOrdersService = require('../customer/orders');
 
 const toQueueOrder = (order) => ({
@@ -62,6 +63,7 @@ const updateStatus = async (orderId, { status, note }) => {
   if (!order) {
     return { errors: [{ name: 'order', message: 'Order not found.' }] };
   }
+  const previous = order.status;
   // Qikink has no cancel API — a pushed order must also be cancelled in the
   // Qikink dashboard, so say so on the order's history.
   const needsQikinkCancel = status === 'cancelled' && order.qikinkOrderId;
@@ -71,6 +73,10 @@ const updateStatus = async (orderId, { status, note }) => {
   order.status = status;
   order.statusHistory.push({ status, note: historyNote });
   await order.save();
+  if (previous !== status && order.shippingEmail) {
+    emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
+  }
+  return { doc: order };
   return { doc: order, warning: needsQikinkCancel ? historyNote : undefined };
 };
 

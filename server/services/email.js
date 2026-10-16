@@ -1,4 +1,5 @@
 const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 
 const FROM = process.env.FROM_EMAIL || 'SunoBro <orders@sunobro.com>';
@@ -8,6 +9,47 @@ const getResend = () => {
   if (!process.env.RESEND_API_KEY) return null;
   if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
   return resendClient;
+};
+
+let smtpTransport = null;
+const getSmtp = () => {
+  const { SMTP_HOST, SMTP_USER, SMTP_PASS } = process.env;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
+  if (!smtpTransport) {
+    const port = Number(process.env.SMTP_PORT || 587);
+    smtpTransport = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port,
+      secure: port === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+  }
+  return smtpTransport;
+};
+
+const mailConfigured = () => Boolean(getSmtp() || process.env.RESEND_API_KEY);
+
+const deliver = async ({ to, subject, html }) => {
+  const smtp = getSmtp();
+  if (smtp) {
+    const from = process.env.SMTP_FROM || `SunoBro <${process.env.SMTP_USER}>`;
+    await smtp.sendMail({
+      from,
+      to,
+      subject,
+      html,
+    });
+    return;
+  }
+
+  const resend = getResend();
+  if (!resend) return;
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject,
+    html,
+  });
 };
 
 const money = (n, cur = 'INR') => `${cur === 'INR' ? '₹' : '$'}${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -23,14 +65,15 @@ const baseStyle = `
   th { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #8888aa; text-align: left; padding: 8px 0; border-bottom: 1px solid #2a2a3d; }
   td { font-size: 13px; padding: 10px 0; border-bottom: 1px solid #1a1a2a; vertical-align: top; }
   .total-row td { border-top: 1px solid #2a2a3d; border-bottom: none; font-weight: bold; padding-top: 16px; font-size: 16px; }
-  .badge { display: inline-block; padding: 2px 8px; background: #1e2a1e; color: #7ec87e; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; border: 1px solid #2a3d2a; }
+  .badge { display: inline-block; padding: 2px 8px; background: #1e2a1e; color: #7ec87e;
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase; border: 1px solid #2a3d2a; }
   .footer { font-size: 11px; color: #555570; margin-top: 40px; }
   a { color: #c5c9f5; }
 `;
 
 const sendOrderConfirmation = async ({ to, order }) => {
-  if (!process.env.RESEND_API_KEY) {
-    logger.warn('RESEND_API_KEY not set — skipping order confirmation email');
+  if (!mailConfigured()) {
+    logger.warn('Email transport not configured — skipping order confirmation email');
     return;
   }
 
@@ -78,22 +121,15 @@ const sendOrderConfirmation = async ({ to, order }) => {
   </div></body></html>`;
 
   try {
-    const resend = getResend();
-    if (!resend) return;
-    await resend.emails.send({
-      from: FROM,
-      to,
-      subject: `Order confirmed — ${order.reference}`,
-      html,
-    });
+    await deliver({ to, subject: `Order confirmed — ${order.reference}`, html });
   } catch (err) {
     logger.error(err, 'Failed to send order confirmation email');
   }
 };
 
 const sendWelcome = async ({ to, name }) => {
-  if (!process.env.RESEND_API_KEY) {
-    logger.warn('RESEND_API_KEY not set — skipping welcome email');
+  if (!mailConfigured()) {
+    logger.warn('Email transport not configured — skipping welcome email');
     return;
   }
 
@@ -112,17 +148,96 @@ const sendWelcome = async ({ to, name }) => {
   </div></body></html>`;
 
   try {
-    const resend = getResend();
-    if (!resend) return;
-    await resend.emails.send({
-      from: FROM,
-      to,
-      subject: 'Welcome to SunoBro',
-      html,
-    });
+    await deliver({ to, subject: 'Welcome to SunoBro', html });
   } catch (err) {
     logger.error(err, 'Failed to send welcome email');
   }
 };
 
-module.exports = { sendOrderConfirmation, sendWelcome };
+const sendDropNotice = async ({ to }) => {
+  if (!mailConfigured()) {
+    const error = new Error('Email transport not configured');
+    error.code = 'MAIL_NOT_CONFIGURED';
+    throw error;
+  }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+  <body><div class="wrap">
+    <div class="logo">// SUNOBRO</div>
+    <h1 style="font-size:24px;margin:0 0 8px">You're on the list.</h1>
+    <p style="color:#8888aa;font-size:13px;margin:0 0 32px">Next drop · early notice</p>
+    <hr class="divider">
+    <p style="font-size:14px;line-height:1.7">
+      We'll email this address when the next technical piece goes live.
+    </p>
+    <hr class="divider">
+    <p class="footer">— SunoBro Technical Ops</p>
+  </div></body></html>`;
+
+  await deliver({
+    to,
+    subject: "You're on the list for the next SunoBro drop",
+    html,
+  });
+};
+
+const STATUS_MAIL = {
+  paid: {
+    subject: (reference) => `Payment received — ${reference}`,
+    title: 'Payment received',
+    body: 'Your payment is confirmed. The order is queued for production.',
+  },
+  shipped: {
+    subject: (reference) => `Shipped — ${reference}`,
+    title: 'Your order has shipped',
+    body: 'The parcel is with the courier.',
+  },
+  delivered: {
+    subject: (reference) => `Delivered — ${reference}`,
+    title: 'Delivered',
+    body: 'Your order was delivered.',
+  },
+  cancelled: {
+    subject: (reference) => `Order cancelled — ${reference}`,
+    title: 'Order cancelled',
+    body: 'This order was cancelled. If you were charged, the refund follows the refund policy.',
+  },
+};
+
+const sendOrderStatus = async ({ to, order }) => {
+  const copy = STATUS_MAIL[order.status];
+  if (!copy || !to) return;
+  if (!mailConfigured()) {
+    logger.warn('Email transport not configured — skipping order status email');
+    return;
+  }
+
+  const tracking = order.qikinkTrackingLink
+    ? `<p style="font-size:14px"><a href="${order.qikinkTrackingLink}">Track shipment</a></p>`
+    : '';
+  const courier = order.qikinkCourier
+    ? `<p style="color:#8888aa;font-size:13px">${order.qikinkCourier}${order.qikinkAwb ? ` · ${order.qikinkAwb}` : ''}</p>`
+    : '';
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
+  <body><div class="wrap">
+    <div class="logo">// SUNOBRO</div>
+    <h1 style="font-size:24px;margin:0 0 8px">${copy.title}</h1>
+    <p style="color:#8888aa;font-size:13px;margin:0 0 32px">Reference: <strong style="color:#c5c9f5">${order.reference}</strong></p>
+    <hr class="divider">
+    <p style="font-size:14px;line-height:1.7">${copy.body}</p>
+    ${courier}
+    ${tracking}
+    <hr class="divider">
+    <p class="footer">— SunoBro Technical Ops</p>
+  </div></body></html>`;
+
+  try {
+    await deliver({ to, subject: copy.subject(order.reference), html });
+  } catch (err) {
+    logger.error(err, 'Failed to send order status email');
+  }
+};
+
+module.exports = {
+  sendOrderConfirmation, sendWelcome, sendDropNotice, sendOrderStatus,
+};
