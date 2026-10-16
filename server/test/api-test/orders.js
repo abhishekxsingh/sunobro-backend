@@ -28,6 +28,8 @@ describe('Orders', () => {
       currency: 'INR',
       images: [],
       sizes: ['M'],
+      // These tests cover stock enforcement, which only applies when tracked.
+      trackInventory: true,
     });
     variant = await ProductVariant.create({
       productId: product._id,

@@ -1,73 +1,9 @@
-const { Product, ProductVariant } = require('../../database/models');
+const { Order, Product, ProductVariant } = require('../../database/models');
 const { QIKINK } = require('../../config');
 const logger = require('../../utils/logger');
-
-const USER_AGENT = 'SunoBro/1.0';
-
-const baseUrl = () => 'https://api.qikink.com';
-
-let cachedToken = null;
-let cachedTokenUntil = 0;
-
-const isConfigured = () => Boolean(QIKINK.CLIENT_ID && QIKINK.CLIENT_SECRET);
-
-const qikinkMessage = (data, status) => (
-  data?.error
-  || data?.message
-  || `Qikink request failed (${status})`
-);
-
-const request = async (path, { method = 'GET', headers = {}, body } = {}) => {
-  const res = await fetch(`${baseUrl()}${path}`, {
-    method,
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': USER_AGENT,
-      ...headers,
-    },
-    body,
-  });
-  const data = await res.json().catch(() => ({}));
-  return { res, data };
-};
-
-const getAccessToken = async (force = false) => {
-  if (!isConfigured()) {
-    throw new Error('Qikink credentials are not configured.');
-  }
-
-  if (!force && cachedToken && Date.now() < cachedTokenUntil) {
-    return cachedToken;
-  }
-
-  const body = new URLSearchParams();
-  body.append('ClientId', QIKINK.CLIENT_ID);
-  body.append('client_secret', QIKINK.CLIENT_SECRET);
-
-  const { res, data } = await request('/api/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-
-  if (!res.ok || !data?.Accesstoken || data?.error) {
-    throw new Error(qikinkMessage(data, res.status));
-  }
-
-  const ttlSeconds = Number(data.expires_in) || 3600;
-  cachedToken = data.Accesstoken;
-  cachedTokenUntil = Date.now() + Math.max((ttlSeconds - 60) * 1000, 30_000);
-  return cachedToken;
-};
-
-const qikinkHeaders = async () => {
-  const token = await getAccessToken();
-  return {
-    'Content-Type': 'application/json',
-    ClientId: QIKINK.CLIENT_ID,
-    Accesstoken: token,
-  };
-};
+const {
+  isConfigured, qikinkMessage, request, getAccessToken, qikinkHeaders, listOrders,
+} = require('./qikink-client');
 
 const getStatus = async () => {
   if (!isConfigured()) {
@@ -155,6 +91,31 @@ const syncAll = async () => {
   return { synced, message: messages.join(' | ') || 'No products.' };
 };
 
+// Qikink's own API has no cancel/update/webhook endpoints — orders are
+// created once and their progress is polled via /api/order/list.
+const FULFILMENT = {
+  SUBMITTING: 'submitting',
+  CREATED: 'created',
+  SKIPPED: 'skipped',
+  ERROR: 'error',
+};
+
+const LIST_PAGE_SIZE = 10; // fixed per_page on /api/order/list
+const SYNC_TTL_MS = 2 * 60 * 1000; // Qikink allows 60 req/min across the account
+const SUBMIT_LOCK_MS = 2 * 60 * 1000; // a crashed push frees its claim after this
+const MAX_AUTO_ATTEMPTS = 3;
+const AUTO_RETRY_BACKOFF_MS = 10 * 60 * 1000;
+const AUTO_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Paid orders, and COD orders (Qikink collects the cash on delivery), are the
+// ones Qikink should print.
+const PUSHABLE = {
+  $or: [{ status: 'paid' }, { status: 'pending', paymentGateway: 'cod' }],
+};
+
+const isPushable = (order) => Boolean(order) && !order.qikinkOrderId
+  && (order.status === 'paid' || (order.status === 'pending' && order.paymentGateway === 'cod'));
+
 const toOrderNumber = (reference, id) => {
   const raw = String(reference || id || '')
     .replace(/[^a-zA-Z0-9_]/g, '_')
@@ -177,18 +138,7 @@ const countryCodeOf = (country) => {
   return raw.slice(0, 2).toUpperCase();
 };
 
-const createOrderFromPaidOrder = async (order) => {
-  if (!isConfigured()) {
-    return {
-      skipped: true,
-      message: 'Qikink not configured — order marked paid but not sent to fulfilment.',
-    };
-  }
-
-  if (order.qikinkOrderId) {
-    return { orderId: order.qikinkOrderId, status: order.qikinkStatus || 'submitted' };
-  }
-
+const buildOrderPayload = async (order) => {
   const lineItems = [];
   const missingSkus = [];
   for (let i = 0; i < (order.items || []).length; i += 1) {
@@ -218,27 +168,34 @@ const createOrderFromPaidOrder = async (order) => {
   }
 
   const { address1, address2 } = splitStreet(order.shippingStreet);
-  const orderNumber = toOrderNumber(order.reference, order.id);
-  const payload = {
-    order_number: orderNumber,
-    qikink_shipping: '1',
-    gateway: 'Prepaid',
-    total_order_value: String(Math.round(order.total)),
-    line_items: lineItems,
-    shipping_address: {
-      first_name: order.shippingFirstName,
-      last_name: order.shippingLastName || '',
-      address1,
-      address2,
-      phone: order.shippingPhone || '9999999999',
-      email: order.shippingEmail || 'orders@sunobro.com',
-      city: order.shippingCity,
-      zip: order.shippingPostalCode,
-      province: order.shippingState || order.shippingCity,
-      country_code: countryCodeOf(order.shippingCountry),
+  return {
+    payload: {
+      order_number: toOrderNumber(order.reference, order.id),
+      qikink_shipping: '1',
+      gateway: order.paymentGateway === 'cod' ? 'COD' : 'Prepaid',
+      total_order_value: String(Math.round(order.total)),
+      line_items: lineItems,
+      shipping_address: {
+        first_name: order.shippingFirstName,
+        last_name: order.shippingLastName || '',
+        address1,
+        address2,
+        phone: order.shippingPhone || '9999999999',
+        email: order.shippingEmail || 'orders@sunobro.com',
+        city: order.shippingCity,
+        zip: order.shippingPostalCode,
+        province: order.shippingState || order.shippingCity,
+        country_code: countryCodeOf(order.shippingCountry),
+      },
     },
   };
+};
 
+const sendOrder = async (order) => {
+  const built = await buildOrderPayload(order);
+  if (built.error) return { error: built.error };
+
+  const { payload } = built;
   try {
     const headers = await qikinkHeaders();
     const { res, data } = await request('/api/order/create', {
@@ -253,32 +210,63 @@ const createOrderFromPaidOrder = async (order) => {
       && String(data.status_code || '200') === '200';
 
     if (!created) {
-      const errMsg = qikinkMessage(data, res.status);
       logger.error({ data, orderId: order.id }, 'qikink-create-order-failed');
-      return { error: errMsg };
+      const message = qikinkMessage(data, res.status);
+      if (/invalid sku/i.test(message)) {
+        const skus = payload.line_items.map((item) => item.sku).join(', ');
+        return {
+          error: `Qikink (${QIKINK.ENV}) rejected SKU ${skus} — it must exist in Qikink → My Products for that account.`,
+        };
+      }
+      return { error: message };
     }
 
-    return {
-      orderId: String(data.order_id),
-      orderNumber,
-      status: 'created',
-      raw: data,
-    };
+    return { orderId: String(data.order_id), orderNumber: payload.order_number };
   } catch (err) {
     logger.error({ err, orderId: order.id }, 'qikink-create-order-error');
     return { error: err.message || 'Qikink request failed' };
   }
 };
 
+// A previous attempt may have reached Qikink even though we never stored the
+// response (timeout, crash). Look the order up by reference before creating
+// it again so a retry never prints a second copy.
+const findExistingRemoteOrder = async (order) => {
+  try {
+    const rows = await listOrders({
+      order_reference_no: order.qikinkOrderNumber || toOrderNumber(order.reference, order.id),
+    });
+    return rows[0] || null;
+  } catch (err) {
+    logger.error({ err, orderId: order.id }, 'qikink-existing-lookup-failed');
+    return null;
+  }
+};
+
 const SHIPPED_STATUSES = new Set([
-  'in-transit',
-  'out for delivery',
-  'picked up',
   'manifested',
   'dispatch ready',
+  'picked up',
+  'in-transit',
+  'out for delivery',
   'delivery rescheduled',
+  'consignee unavailable',
+  'not attempted',
+  'maximum attempts reached',
+  'misrouted',
+  'oda',
+  'open delivery refused',
+  'otp not shared',
+  'otp verification cancelled',
+  'refused to accept',
+  'residence / office closed',
+  'incorrect/incomplete address',
+  'self collect',
+  'exception',
 ]);
 
+// RTO / Returned / Lost are left on the store status the admin sees, with the
+// Qikink label recorded alongside — they need a human decision (refund, reship).
 const storeStatusFromQikink = (qikinkStatus, current) => {
   const label = String(qikinkStatus || '').trim().toLowerCase();
   if (label === 'delivered') return 'delivered';
@@ -290,35 +278,24 @@ const storeStatusFromQikink = (qikinkStatus, current) => {
   return current;
 };
 
-const listOrders = async (query = {}) => {
-  const headers = await qikinkHeaders();
-  const params = new URLSearchParams();
-  Object.entries(query).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && String(value) !== '') {
-      params.set(key, String(value));
-    }
-  });
-  const qs = params.toString();
-  const { res, data } = await request(`/api/order/list${qs ? `?${qs}` : ''}`, { headers });
-  if (!res.ok || data?.success === false) {
-    throw new Error(qikinkMessage(data, res.status));
-  }
-  return Array.isArray(data?.data) ? data.data : [];
-};
-
 const applyQikinkRow = (order, row) => {
   // Mongoose documents are updated in place, then saved by the caller.
   /* eslint-disable no-param-reassign */
   const shipping = row.shipping || {};
+  const previousLabel = order.qikinkStatus;
   const nextStatus = storeStatusFromQikink(row.status, order.status);
   order.qikinkOrderId = row.order_id ? String(row.order_id) : order.qikinkOrderId;
   order.qikinkStatus = row.status || order.qikinkStatus;
   order.qikinkAwb = shipping.awb || order.qikinkAwb;
-  order.qikinkTrackingLink = shipping.tracking_link || order.qikinkTrackingLink;
+  // Qikink returns ".../?awb=" before a shipment exists — only keep real links.
+  order.qikinkTrackingLink = shipping.awb
+    ? shipping.tracking_link || order.qikinkTrackingLink
+    : order.qikinkAwb && order.qikinkTrackingLink;
   order.qikinkCourier = shipping.courier_provider_name
     ? String(shipping.courier_provider_name).trim()
     : order.qikinkCourier;
-  if (nextStatus !== order.status) {
+  order.qikinkError = undefined;
+  if (nextStatus !== order.status || (row.status && row.status !== previousLabel)) {
     order.status = nextStatus;
     order.statusHistory.push({
       status: nextStatus,
@@ -328,44 +305,191 @@ const applyQikinkRow = (order, row) => {
   /* eslint-enable no-param-reassign */
 };
 
-const syncOrder = async (order) => {
-  if (!order || !isConfigured()) return order;
-  const canLookup = order.qikinkOrderId
-    || order.qikinkOrderNumber
-    || order.status === 'paid'
-    || order.status === 'shipped'
-    || order.status === 'delivered';
-  if (!canLookup || order.status === 'pending') return order;
+/**
+ * Push a paid (or COD) order to Qikink exactly once. The order is claimed
+ * atomically (pushable, no Qikink id, not mid-submit) so the payment verify call and
+ * the Razorpay webhook racing each other — or an admin retry — cannot both
+ * create it.
+ */
+const fulfillOrder = async (orderId) => {
+  if (!isConfigured()) {
+    const order = await Order.findOneAndUpdate(
+      { _id: orderId, qikinkOrderId: null, ...PUSHABLE },
+      {
+        $set: {
+          qikinkStatus: FULFILMENT.SKIPPED,
+          qikinkError: 'Qikink not configured — order marked paid but not sent to fulfilment.',
+        },
+      },
+      { new: true },
+    );
+    return { order: order || await Order.findById(orderId), pushed: false };
+  }
 
-  const query = order.qikinkOrderId
-    ? { id: order.qikinkOrderId }
-    : { order_reference_no: order.qikinkOrderNumber || toOrderNumber(order.reference, order.id) };
+  const now = new Date();
+  const order = await Order.findOneAndUpdate(
+    {
+      _id: orderId,
+      qikinkOrderId: null,
+      $and: [PUSHABLE, {
+        $or: [
+          { qikinkStatus: { $ne: FULFILMENT.SUBMITTING } },
+          { qikinkLastAttemptAt: { $lt: new Date(now.getTime() - SUBMIT_LOCK_MS) } },
+        ],
+      }],
+    },
+    {
+      $set: { qikinkStatus: FULFILMENT.SUBMITTING, qikinkLastAttemptAt: now },
+      $inc: { qikinkAttempts: 1 },
+    },
+    { new: true },
+  );
+
+  if (!order) {
+    return { order: await Order.findById(orderId), pushed: false };
+  }
 
   try {
-    const rows = await listOrders(query);
-    if (rows[0]) {
-      applyQikinkRow(order, rows[0]);
+    const existing = order.qikinkAttempts > 1 ? await findExistingRemoteOrder(order) : null;
+    if (existing) {
+      applyQikinkRow(order, existing);
+      order.qikinkOrderNumber = order.qikinkOrderNumber || toOrderNumber(order.reference, order.id);
+      order.qikinkSyncedAt = new Date();
+      order.statusHistory.push({
+        status: order.status,
+        note: `Qikink order already existed: ${order.qikinkOrderId}`,
+      });
       await order.save();
+      return { order, pushed: true };
     }
+
+    const result = await sendOrder(order);
+    if (result.orderId) {
+      order.qikinkOrderId = result.orderId;
+      order.qikinkOrderNumber = result.orderNumber;
+      order.qikinkStatus = FULFILMENT.CREATED;
+      order.qikinkError = undefined;
+      order.statusHistory.push({
+        status: order.status,
+        note: `Qikink order created: ${order.qikinkOrderId}`,
+      });
+    } else {
+      order.qikinkStatus = FULFILMENT.ERROR;
+      order.qikinkError = result.error;
+      order.statusHistory.push({
+        status: order.status,
+        note: `Qikink fulfilment failed (attempt ${order.qikinkAttempts}): ${result.error}`,
+      });
+    }
+    await order.save();
+    return { order, pushed: Boolean(result.orderId) };
   } catch (err) {
-    logger.error({ err, orderId: order.id }, 'qikink-order-list-failed');
+    logger.error({ err, orderId: order.id }, 'qikink-fulfill-failed');
+    order.qikinkStatus = FULFILMENT.ERROR;
+    order.qikinkError = err.message || 'Qikink fulfilment failed';
+    await order.save().catch(() => {});
+    return { order, pushed: false };
   }
-  return order;
 };
 
-const syncOrders = async (orders) => {
-  const targets = (orders || []).filter((order) => order.status !== 'pending').slice(0, 10);
-  await Promise.all(targets.map((order) => syncOrder(order)));
+const CLOSED_STATUSES = ['delivered', 'cancelled'];
+
+const isSyncable = (order) => Boolean(order?.qikinkOrderId)
+  && !CLOSED_STATUSES.includes(order.status);
+
+const isStale = (order, now) => !order.qikinkSyncedAt
+  || now - new Date(order.qikinkSyncedAt).getTime() > SYNC_TTL_MS;
+
+/**
+ * Refresh Qikink status/tracking for the given orders, in batches of 10 ids
+ * per request. Orders synced within SYNC_TTL_MS are skipped unless `force`.
+ */
+const syncOrders = async (orders, { force = false } = {}) => {
+  if (!isConfigured()) return orders;
+  const now = Date.now();
+  const targets = (orders || []).filter((o) => isSyncable(o) && (force || isStale(o, now)));
+
+  for (let i = 0; i < targets.length; i += LIST_PAGE_SIZE) {
+    const chunk = targets.slice(i, i + LIST_PAGE_SIZE);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const rows = await listOrders({ ids: chunk.map((o) => o.qikinkOrderId).join(',') });
+      const rowById = new Map(rows.map((row) => [String(row.order_id), row]));
+      // eslint-disable-next-line no-await-in-loop
+      await Promise.all(chunk.map(async (order) => {
+        const row = rowById.get(String(order.qikinkOrderId));
+        if (row) applyQikinkRow(order, row);
+        // eslint-disable-next-line no-param-reassign
+        order.qikinkSyncedAt = new Date();
+        try {
+          await order.save();
+        } catch (err) {
+          logger.error({ err, orderId: order.id }, 'qikink-order-save-failed');
+        }
+      }));
+    } catch (err) {
+      logger.error({ err, orderIds: chunk.map((o) => o.id) }, 'qikink-order-list-failed');
+    }
+  }
   return orders;
 };
 
+const syncOrder = async (order, opts) => {
+  if (order) await syncOrders([order], opts);
+  return order;
+};
+
+/** Background job: refresh in-flight orders oldest-synced first. */
+const syncActiveOrders = async ({ limit = 50 } = {}) => {
+  if (!isConfigured()) return { synced: 0 };
+  const orders = await Order.find({
+    status: { $nin: CLOSED_STATUSES },
+    qikinkOrderId: { $ne: null },
+  }).sort({ qikinkSyncedAt: 1 }).limit(limit);
+  await syncOrders(orders, { force: true });
+  return { synced: orders.length };
+};
+
+/**
+ * Background job: retry pushes that failed recently. Only orders this flow
+ * already attempted (qikinkLastAttemptAt set) inside the last 24h qualify, so
+ * old or manually-marked-paid orders are never pushed without an admin.
+ */
+const retryFailedPushes = async ({ limit = 10 } = {}) => {
+  if (!isConfigured()) return { retried: 0, pushed: 0 };
+  const now = Date.now();
+  const orders = await Order.find({
+    ...PUSHABLE,
+    qikinkOrderId: null,
+    qikinkStatus: { $in: [FULFILMENT.ERROR, FULFILMENT.SUBMITTING] },
+    qikinkAttempts: { $lt: MAX_AUTO_ATTEMPTS },
+    qikinkLastAttemptAt: {
+      $gte: new Date(now - AUTO_RETRY_WINDOW_MS),
+      $lt: new Date(now - AUTO_RETRY_BACKOFF_MS),
+    },
+  }).select('_id').limit(limit);
+
+  let pushed = 0;
+  for (let i = 0; i < orders.length; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const result = await fulfillOrder(orders[i]._id);
+    if (result.pushed) pushed += 1;
+  }
+  return { retried: orders.length, pushed };
+};
+
 module.exports = {
+  FULFILMENT,
   getStatus,
   syncProduct,
   syncAll,
-  createOrderFromPaidOrder,
+  fulfillOrder,
+  isPushable,
   listOrders,
   syncOrder,
   syncOrders,
+  syncActiveOrders,
+  retryFailedPushes,
+  storeStatusFromQikink,
   isConfigured,
 };

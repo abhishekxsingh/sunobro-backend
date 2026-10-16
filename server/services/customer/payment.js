@@ -18,51 +18,46 @@ const getClient = () => {
 
 const toPaise = (amount) => Math.round(Number(amount) * 100);
 
+// /payments/verify and the payment.captured webhook can arrive together. The
+// pending → paid flip is a single conditional update so only one of them wins
+// and goes on to push the order to Qikink.
 const markPaidAndFulfill = async (order, paymentId) => {
-  if (order.status === 'paid') {
-    if (paymentId && !order.razorpayPaymentId) {
-      order.razorpayPaymentId = paymentId;
-      await order.save();
-    }
-    return order;
-  }
+  const paid = await Order.findOneAndUpdate(
+    { _id: order._id, status: 'pending' },
+    {
+      $set: {
+        status: 'paid',
+        razorpayPaymentId: paymentId || order.razorpayPaymentId,
+      },
+      $push: {
+        statusHistory: {
+          status: 'paid',
+          note: 'Payment verified via Razorpay.',
+          createdAt: new Date(),
+        },
+      },
+    },
+    { new: true },
+  );
 
-  order.status = 'paid';
-  order.razorpayPaymentId = paymentId || order.razorpayPaymentId;
-  order.statusHistory.push({ status: 'paid', note: 'Payment verified via Razorpay.' });
-  await order.save();
+  if (!paid) {
+    const current = await Order.findById(order._id);
+    if (current && paymentId && !current.razorpayPaymentId) {
+      current.razorpayPaymentId = paymentId;
+      await current.save();
+    }
+    return current;
+  }
 
   try {
-    const qikinkResult = await QikinkService.createOrderFromPaidOrder(order);
-    if (qikinkResult?.orderId) {
-      order.qikinkOrderId = String(qikinkResult.orderId);
-      order.qikinkOrderNumber = qikinkResult.orderNumber || order.qikinkOrderNumber;
-      order.qikinkStatus = qikinkResult.status || 'submitted';
-      order.qikinkError = undefined;
-      order.statusHistory.push({
-        status: 'paid',
-        note: `Qikink order created: ${order.qikinkOrderId}`,
-      });
-    } else if (qikinkResult?.skipped) {
-      order.qikinkStatus = 'skipped';
-      order.qikinkError = qikinkResult.message;
-    } else if (qikinkResult?.error) {
-      order.qikinkStatus = 'error';
-      order.qikinkError = qikinkResult.error;
-      order.statusHistory.push({
-        status: 'paid',
-        note: `Qikink fulfillment failed: ${qikinkResult.error}`,
-      });
-    }
-    await order.save();
+    const { order: fulfilled } = await QikinkService.fulfillOrder(paid._id);
+    return fulfilled || paid;
   } catch (err) {
-    logger.error({ err, orderId: order.id }, 'qikink-fulfill-failed');
-    order.qikinkStatus = 'error';
-    order.qikinkError = err.message || 'Qikink fulfillment failed';
-    await order.save();
+    // Never fail a verified payment because fulfilment broke — the order stays
+    // paid and can be pushed again from the admin panel.
+    logger.error({ err, orderId: paid.id }, 'qikink-fulfill-failed');
+    return paid;
   }
-
-  return order;
 };
 
 const createOrder = async ({ orderId }) => {

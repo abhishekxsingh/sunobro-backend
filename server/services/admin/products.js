@@ -13,62 +13,114 @@ const slugifyPart = (value) => String(value || '')
   .replace(/\s+/g, '-')
   .replace(/[^A-Z0-9-]/g, '');
 
-const buildVariantsFromPayload = (product, payload) => {
-  if (Array.isArray(payload.variants) && payload.variants.length > 0) {
-    return payload.variants.map((v) => ({
-      productId: product._id,
-      size: v.size,
-      color: v.color,
-      sku: v.sku || `${slugifyPart(product.slug)}-${slugifyPart(v.color)}-${slugifyPart(v.size)}`,
-      stock: v.stock ?? payload.stock ?? 100,
-      price: v.price,
-      qikinkSku: v.qikinkSku || payload.qikinkSku || undefined,
-    }));
+const variantKey = (size, color) => `${String(size).trim().toLowerCase()}|${String(color).trim().toLowerCase()}`;
+
+const defaultSku = (slug, size, color) => `${slugifyPart(slug)}-${slugifyPart(color)}-${slugifyPart(size)}`;
+
+const conflict = (name, message) => ({ type: 'conflict', errors: [{ name, message }] });
+
+const hasVariantInput = (payload) => Array.isArray(payload.variants)
+  || Array.isArray(payload.colors)
+  || payload.qikinkSku !== undefined;
+
+/**
+ * Each variant (size × colour) maps to exactly one Qikink "My Products" SKU —
+ * that SKU is what tells Qikink which garment, colour, size and design to print.
+ * Explicit `variants` are the normal path; sizes × colours is a convenience that
+ * leaves Qikink SKUs empty unless there is a single colour (legacy BASE-SIZE).
+ */
+const normalizeVariants = (slug, payload) => {
+  let rows = payload.variants;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const sizes = payload.sizes?.length ? payload.sizes : ['M'];
+    const colors = payload.colors?.length ? payload.colors : ['Black'];
+    const base = colors.length === 1 && payload.qikinkSku ? payload.qikinkSku.trim() : '';
+    rows = sizes.flatMap((size) => colors.map((color) => ({
+      size,
+      color,
+      qikinkSku: base ? `${base}-${slugifyPart(size)}` : undefined,
+    })));
   }
 
-  const sizes = (payload.sizes && payload.sizes.length > 0) ? payload.sizes : ['M'];
-  const colors = (payload.colors && payload.colors.length > 0) ? payload.colors : ['Black'];
-  const stock = payload.stock ?? 100;
-  const rows = [];
-
-  sizes.forEach((size) => {
-    colors.forEach((color) => {
-      const sku = `${slugifyPart(product.slug)}-${slugifyPart(color)}-${slugifyPart(size)}`;
-      const qikinkSku = payload.qikinkSku
-        ? `${payload.qikinkSku}-${slugifyPart(size)}`
-        : undefined;
-      rows.push({
-        productId: product._id,
-        size,
-        color,
-        sku,
-        stock,
-        qikinkSku,
-      });
-    });
-  });
-
-  return rows;
+  return rows.map((v) => ({
+    size: String(v.size).trim(),
+    color: String(v.color).trim(),
+    sku: v.sku?.trim() || defaultSku(slug, v.size, v.color),
+    stock: v.stock ?? payload.stock,
+    price: v.price ?? undefined,
+    qikinkSku: v.qikinkSku?.trim() || undefined,
+  }));
 };
 
-const enrichWithVariantStats = async (products) => {
-  const productIds = products.map((p) => p._id);
-  const variants = await ProductVariant.find({ productId: { $in: productIds } });
+const validateVariants = (rows) => {
+  const errors = [];
+  const flagDuplicates = (field, keyOf, message) => {
+    const counts = new Map();
+    rows.forEach((row) => {
+      const key = keyOf(row);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    [...counts.entries()].filter(([, n]) => n > 1)
+      .forEach(([key]) => errors.push({ name: field, message: message(key) }));
+  };
 
-  const statsByProductId = variants.reduce((map, v) => {
+  if (rows.length === 0) errors.push({ name: 'variants', message: 'Add at least one size/colour variant.' });
+  flagDuplicates('variants', (r) => variantKey(r.size, r.color), (k) => `Duplicate variant ${k.replace('|', ' / ')}.`);
+  flagDuplicates('sku', (r) => r.sku, (k) => `Duplicate SKU ${k}.`);
+  // Two variants on one Qikink SKU means one of them prints the wrong item.
+  flagDuplicates('qikinkSku', (r) => r.qikinkSku, (k) => `Qikink SKU ${k} is used by more than one variant.`);
+  return errors;
+};
+
+const mappingStats = (variants) => {
+  const mappedCount = variants.filter((v) => Boolean(v.qikinkSku)).length;
+  return {
+    variantCount: variants.length,
+    mappedCount,
+    qikinkSynced: variants.length > 0 && mappedCount === variants.length,
+    totalStock: variants.reduce((sum, v) => sum + (v.stock || 0), 0),
+  };
+};
+
+// A product can only be live once every variant can actually be fulfilled.
+const resolveStatus = (requested, current, variants) => {
+  const { qikinkSynced, mappedCount, variantCount } = mappingStats(variants);
+  if (requested === 'active' && !qikinkSynced) {
+    return conflict(
+      'status',
+      `Map every variant to a Qikink SKU before publishing (${mappedCount}/${variantCount} mapped).`,
+    );
+  }
+  if (requested) return { status: requested };
+  if (current) return { status: current };
+  return { status: qikinkSynced ? 'active' : 'draft' };
+};
+
+const skuTakenElsewhere = async (rows, productId) => {
+  const clash = await ProductVariant.findOne({
+    sku: { $in: rows.map((r) => r.sku) },
+    ...(productId ? { productId: { $ne: productId } } : {}),
+  });
+  return clash ? conflict('sku', `SKU ${clash.sku} is already used by another product.`) : null;
+};
+
+const toDTO = (product, variants) => toFullProductDTO({
+  ...product.toObject({ virtuals: true }),
+  ...mappingStats(variants),
+}, variants);
+
+const enrichWithVariantStats = async (products) => {
+  const variants = await ProductVariant.find({ productId: { $in: products.map((p) => p._id) } });
+  const byProduct = variants.reduce((map, v) => {
     const key = v.productId.toString();
-    const s = map.get(key) || { variantCount: 0, totalStock: 0, qikinkSynced: true };
-    s.variantCount += 1;
-    s.totalStock += v.stock;
-    if (!v.qikinkSku) s.qikinkSynced = false;
-    map.set(key, s);
+    map.set(key, [...(map.get(key) || []), v]);
     return map;
   }, new Map());
 
-  return products.map((p) => {
-    const stats = statsByProductId.get(p.id) || { variantCount: 0, totalStock: 0, qikinkSynced: false };
-    return toFullProductDTO({ ...p.toObject({ virtuals: true }), ...stats }, []);
-  });
+  return products.map((p) => toFullProductDTO({
+    ...p.toObject({ virtuals: true }),
+    ...mappingStats(byProduct.get(p.id) || []),
+  }, []));
 };
 
 const list = async ({ page = 1, limit = PAGINATION.DEFAULT_LIMIT } = {}) => {
@@ -92,77 +144,82 @@ const get = async (id) => {
     return { errors: [{ name: 'product', message: 'Product not found.' }] };
   }
   const variants = await ProductVariant.find({ productId: product._id });
-  return { doc: toFullProductDTO(product, variants) };
+  return { doc: toDTO(product, variants) };
 };
+
+const inStockFor = (trackInventory, variants) => !trackInventory
+  || variants.some((v) => v.stock > 0);
 
 const create = async (payload) => {
   const {
-    colors, stock, qikinkSku, variants, ...productFields
+    colors, stock, qikinkSku, variants, status, ...productFields
   } = payload;
   const slug = productFields.slug || generateSlug(productFields.name);
 
+  const rows = normalizeVariants(slug, {
+    sizes: productFields.sizes, colors, stock: stock ?? 100, qikinkSku, variants,
+  });
+  const invalid = validateVariants(rows);
+  if (invalid.length) return { errors: invalid };
+
+  const resolved = resolveStatus(status, null, rows);
+  if (resolved.errors) return resolved;
+
+  const taken = await skuTakenElsewhere(rows, null);
+  if (taken) return taken;
+
+  let product;
   try {
-    const product = await Product.create({ ...productFields, slug });
-    const variantDocs = buildVariantsFromPayload(product, {
-      sizes: productFields.sizes,
-      colors,
-      stock,
-      qikinkSku,
-      variants,
+    product = await Product.create({
+      ...productFields,
+      slug,
+      status: resolved.status,
+      sizes: productFields.sizes?.length ? productFields.sizes : [...new Set(rows.map((r) => r.size))],
+      inStock: inStockFor(productFields.trackInventory, rows),
     });
-
-    if (variantDocs.length > 0) {
-      try {
-        await ProductVariant.insertMany(variantDocs);
-      } catch (err) {
-        await Product.findByIdAndDelete(product._id);
-        if (err.code === 11000) {
-          return {
-            type: 'conflict',
-            errors: [{ name: 'sku', message: 'A variant SKU already exists. Use unique sizes/colors or custom SKUs.' }],
-          };
-        }
-        throw err;
-      }
-    }
-
-    const savedVariants = await ProductVariant.find({ productId: product._id });
-    const totalStock = savedVariants.reduce((sum, v) => sum + v.stock, 0);
-    if (product.inStock !== totalStock > 0) {
-      product.inStock = totalStock > 0;
-      await product.save();
-    }
-
-    return {
-      doc: toFullProductDTO({
-        ...product.toObject({ virtuals: true }),
-        variantCount: savedVariants.length,
-        totalStock,
-        qikinkSynced: savedVariants.length > 0 && savedVariants.every((v) => Boolean(v.qikinkSku)),
-      }, savedVariants),
-    };
   } catch (err) {
-    if (err.code === 11000) {
-      return { type: 'conflict', errors: [{ name: 'slug', message: `Slug already exists: ${slug}` }] };
-    }
+    if (err.code === 11000) return conflict('slug', `Slug already exists: ${slug}`);
     throw err;
   }
+
+  try {
+    await ProductVariant.insertMany(rows.map((r) => ({ ...r, productId: product._id })));
+  } catch (err) {
+    await Product.findByIdAndDelete(product._id);
+    if (err.code === 11000) return conflict('sku', 'A variant SKU already exists.');
+    throw err;
+  }
+
+  const savedVariants = await ProductVariant.find({ productId: product._id });
+  return { doc: toDTO(product, savedVariants) };
 };
 
-const replaceVariants = async (product, payload) => {
-  const hasVariantInput = Array.isArray(payload.variants)
-    || Array.isArray(payload.sizes)
-    || Array.isArray(payload.colors)
-    || payload.stock !== undefined
-    || payload.qikinkSku !== undefined;
+// Update variants in place keyed by size/colour so SKUs (which past orders
+// reference), ids and stock survive an edit.
+const syncVariants = async (product, rows) => {
+  const existing = await ProductVariant.find({ productId: product._id });
+  const existingByKey = new Map(existing.map((v) => [variantKey(v.size, v.color), v]));
+  const keep = new Set(rows.map((row) => variantKey(row.size, row.color)));
 
-  if (!hasVariantInput) return null;
-
-  await ProductVariant.deleteMany({ productId: product._id });
-  const variantDocs = buildVariantsFromPayload(product, payload);
-  if (variantDocs.length > 0) {
-    await ProductVariant.insertMany(variantDocs);
+  const removed = existing.filter((v) => !keep.has(variantKey(v.size, v.color)));
+  if (removed.length) {
+    await ProductVariant.deleteMany({ _id: { $in: removed.map((v) => v._id) } });
   }
+
+  await Promise.all(rows.map(async (row) => {
+    const current = existingByKey.get(variantKey(row.size, row.color));
+    if (!current) {
+      return ProductVariant.create({ ...row, productId: product._id });
+    }
+    current.size = row.size;
+    current.color = row.color;
+    current.sku = row.sku;
+    current.qikinkSku = row.qikinkSku;
+    current.price = row.price;
+    if (row.stock !== undefined) current.stock = row.stock;
+    return current.save();
+  }));
+
   return ProductVariant.find({ productId: product._id });
 };
 
@@ -170,53 +227,48 @@ const update = async (id, payload) => {
   if (invalidId(id)) return { errors: [{ name: 'product', message: 'Product not found.' }] };
 
   const {
-    colors, stock, qikinkSku, variants, ...productFields
+    colors, stock, qikinkSku, variants, status, ...productFields
   } = payload;
 
-  const product = await Product.findByIdAndUpdate(
-    id,
-    { $set: productFields },
-    { new: true, runValidators: true },
-  );
+  const product = await Product.findById(id);
   if (!product) {
     return { errors: [{ name: 'product', message: 'Product not found.' }] };
   }
 
-  let savedVariants;
+  const existingVariants = await ProductVariant.find({ productId: product._id });
+  const existingSkuByKey = new Map(existingVariants.map((v) => [variantKey(v.size, v.color), v.sku]));
+
+  let rows = null;
+  if (hasVariantInput(payload)) {
+    rows = normalizeVariants(product.slug, {
+      sizes: productFields.sizes ?? product.sizes, colors, stock, qikinkSku, variants,
+    }).map((row, i) => ({
+      ...row,
+      // Keep an existing variant's SKU unless one was sent explicitly.
+      sku: variants?.[i]?.sku?.trim() || existingSkuByKey.get(variantKey(row.size, row.color)) || row.sku,
+    }));
+    const invalid = validateVariants(rows);
+    if (invalid.length) return { errors: invalid };
+    const taken = await skuTakenElsewhere(rows, product._id);
+    if (taken) return taken;
+  }
+
+  const resolved = resolveStatus(status, product.status, rows || existingVariants);
+  if (resolved.errors) return resolved;
+
+  const savedVariants = rows ? await syncVariants(product, rows) : existingVariants;
+
+  Object.assign(product, productFields, { status: resolved.status });
+  if (rows && !productFields.sizes) product.sizes = [...new Set(rows.map((r) => r.size))];
+  product.inStock = inStockFor(product.trackInventory, savedVariants);
   try {
-    savedVariants = await replaceVariants(product, {
-      sizes: productFields.sizes ?? product.sizes,
-      colors,
-      stock,
-      qikinkSku,
-      variants,
-    });
+    await product.save();
   } catch (err) {
-    if (err.code === 11000) {
-      return {
-        type: 'conflict',
-        errors: [{ name: 'sku', message: 'A variant SKU already exists.' }],
-      };
-    }
+    if (err.code === 11000) return conflict('slug', `Slug already exists: ${productFields.slug}`);
     throw err;
   }
 
-  if (!savedVariants) {
-    savedVariants = await ProductVariant.find({ productId: product._id });
-  }
-
-  const totalStock = savedVariants.reduce((sum, v) => sum + v.stock, 0);
-  product.inStock = totalStock > 0;
-  await product.save();
-
-  return {
-    doc: toFullProductDTO({
-      ...product.toObject({ virtuals: true }),
-      variantCount: savedVariants.length,
-      totalStock,
-      qikinkSynced: savedVariants.length > 0 && savedVariants.every((v) => Boolean(v.qikinkSku)),
-    }, savedVariants),
-  };
+  return { doc: toDTO(product, savedVariants) };
 };
 
 const remove = async (id) => {
@@ -234,8 +286,8 @@ const bulkCreate = async (products) => {
     async (accPromise, payload) => {
       const acc = await accPromise;
       const result = await create(payload);
-      if (result.errors || result.type === 'conflict') {
-        acc.errors.push({ payload, errors: result.errors });
+      if (result.errors) {
+        acc.errors.push({ name: payload.name, errors: result.errors });
       } else {
         acc.created.push(result.doc);
       }

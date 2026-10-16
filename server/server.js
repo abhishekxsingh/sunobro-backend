@@ -12,6 +12,7 @@ const correlationId = require('./utils/correlation-id');
 const attachResponseHelpers = require('./utils/middleware/http');
 const logger = require('./utils/logger');
 const routes = require('./routes');
+const startCron = require('./cron');
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)$/;
 const PRIVATE_HOST = /^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/;
@@ -81,6 +82,7 @@ if (require.main === module) {
       app.listen(PORT, () => {
         logger.info(`server on port ${PORT} (${NODE_ENV})`);
       });
+      startCron();
     })
     .catch((err) => {
       logger.error(err, 'MongoDB connection failed');
