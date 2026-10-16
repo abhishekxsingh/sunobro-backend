@@ -50,7 +50,13 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
 app.use(cookieParser());
-app.use(express.json());
+// Keep the exact request bytes: Razorpay signs the raw webhook body, and a
+// re-serialised JSON.stringify(req.body) will not match its signature.
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 
 app.use('/', routes);
 

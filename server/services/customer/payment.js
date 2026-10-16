@@ -126,13 +126,19 @@ const createOrder = async ({ orderId }) => {
   };
 };
 
-const verifySignature = (paymentOrderId, paymentId, signature) => {
-  const expected = crypto
-    .createHmac('sha256', RAZORPAY.KEY_SECRET)
-    .update(`${paymentOrderId}|${paymentId}`)
-    .digest('hex');
-  return expected === signature;
+// Constant-time HMAC-SHA256 check, shared by checkout verify and the webhook.
+const hmacMatches = (secret, payload, signature) => {
+  if (!secret || !signature || typeof signature !== 'string') return false;
+  const expected = Buffer.from(crypto.createHmac('sha256', secret).update(payload).digest('hex'));
+  const given = Buffer.from(signature);
+  return expected.length === given.length && crypto.timingSafeEqual(expected, given);
 };
+
+const verifySignature = (paymentOrderId, paymentId, signature) => hmacMatches(
+  RAZORPAY.KEY_SECRET,
+  `${paymentOrderId}|${paymentId}`,
+  signature,
+);
 
 const verify = async ({
   orderId, paymentOrderId, paymentId, signature,
@@ -180,5 +186,5 @@ const verify = async ({
 };
 
 module.exports = {
-  createOrder, verify, markPaidAndFulfill, verifySignature,
+  createOrder, verify, markPaidAndFulfill, verifySignature, hmacMatches, toPaise,
 };
