@@ -43,7 +43,7 @@ const toProductDTO = (product) => ({
   description: product.description,
   images: product.images,
   sizes: product.sizes,
-  inStock: product.inStock,
+  inStock: product.trackInventory ? product.inStock : true,
 });
 
 const toOrderItemDTO = (item) => ({
@@ -56,6 +56,28 @@ const toOrderItemDTO = (item) => ({
   qty: item.qty,
 });
 
+// Shoppers see plain-language progress, never Qikink's internal labels or
+// our own push states (submitting/error/skipped).
+const CUSTOMER_FULFILMENT_LABELS = [
+  [['printed', 's-printed', 'partially printed', 'stitched/qc'], 'Printed — packing'],
+  [['manifested', 'dispatch ready', 'picked up'], 'Packed — awaiting courier'],
+  [['in-transit', 'delivery rescheduled', 'misrouted', 'exception'], 'In transit'],
+  [['out for delivery'], 'Out for delivery'],
+  [['delivered'], 'Delivered'],
+  [['cancelled'], 'Cancelled'],
+  [['rto initiated', 'returned', 'partially returned', 'lost', 'refused to accept',
+    'maximum attempts reached', 'incorrect/incomplete address', 'consignee unavailable',
+    'not attempted', 'otp not shared', 'otp verification cancelled', 'open delivery refused',
+    'residence / office closed', 'oda'], 'Delivery issue — we will contact you'],
+];
+
+const toCustomerFulfilmentLabel = (qikinkStatus) => {
+  if (!qikinkStatus) return null;
+  const label = String(qikinkStatus).trim().toLowerCase();
+  const match = CUSTOMER_FULFILMENT_LABELS.find(([labels]) => labels.includes(label));
+  return match ? match[1] : 'Processing';
+};
+
 const toOrderDTO = (order) => ({
   id: order.id,
   reference: order.reference,
@@ -67,9 +89,10 @@ const toOrderDTO = (order) => ({
   destination: order.destination || undefined,
   estimatedArrival: order.estimatedArrival || undefined,
   qikinkOrderId: order.qikinkOrderId || null,
-  qikinkStatus: order.qikinkStatus || null,
-  qikinkError: order.qikinkError || null,
-  trackingLink: order.qikinkTrackingLink || null,
+  qikinkStatus: toCustomerFulfilmentLabel(order.qikinkStatus),
+  // Fulfilment errors are for admins (missing SKUs, API failures) — never shown to shoppers.
+  qikinkError: null,
+  trackingLink: (order.qikinkAwb && order.qikinkTrackingLink) || null,
   awb: order.qikinkAwb || null,
   courier: order.qikinkCourier || null,
   shipping: {
@@ -96,23 +119,30 @@ const toVariantDTO = (variant) => ({
   qikinkSku: variant.qikinkSku ?? null,
 });
 
-const toCustomerVariantDTO = (variant) => ({
+// Print-on-demand variants (trackInventory off) are always available and
+// report no stock count.
+const toCustomerVariantDTO = (variant, trackInventory = true) => ({
   id: variant.id || variant._id,
   size: variant.size,
   color: variant.color,
   sku: variant.sku,
-  stock: variant.stock,
+  stock: trackInventory ? variant.stock : null,
+  available: trackInventory ? variant.stock > 0 : true,
   price: variant.price ?? null,
 });
 
 const toProductWithVariantsDTO = (product, variants = []) => ({
   ...toProductDTO(product),
-  variants: Array.isArray(variants) ? variants.map(toCustomerVariantDTO) : [],
+  variants: Array.isArray(variants)
+    ? variants.map((v) => toCustomerVariantDTO(v, Boolean(product.trackInventory)))
+    : [],
 });
 
 const toFullProductDTO = (product, variants = []) => ({
   ...toProductDTO(product),
   status: product.status,
+  trackInventory: Boolean(product.trackInventory),
+  mappedCount: product.mappedCount ?? variants.filter((v) => Boolean(v.qikinkSku)).length,
   variantCount: product.variantCount ?? variants.length,
   totalStock: product.totalStock ?? variants.reduce((sum, v) => sum + v.stock, 0),
   qikinkSynced: product.qikinkSynced ?? variants.every((v) => Boolean(v.qikinkSku)),

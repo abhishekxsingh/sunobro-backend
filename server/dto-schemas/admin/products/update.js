@@ -28,6 +28,7 @@ module.exports = {
     qikinkSku: { type: 'string' },
     variants: { type: 'array', items: variantItem },
     status: { type: 'string', enum: ['active', 'draft'] },
+    trackInventory: { type: 'boolean' },
     inStock: { type: 'boolean' },
   },
   additionalProperties: false,

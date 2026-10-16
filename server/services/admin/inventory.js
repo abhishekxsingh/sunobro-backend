@@ -15,7 +15,7 @@ const list = async ({ page = 1, limit = PAGINATION.DEFAULT_LIMIT } = {}) => {
 
   const [variants, count] = await Promise.all([
     ProductVariant.find({})
-      .populate('productId', 'name')
+      .populate('productId', 'name trackInventory')
       .sort({ stock: 1 })
       .skip(skip)
       .limit(cappedLimit),
@@ -28,7 +28,9 @@ const list = async ({ page = 1, limit = PAGINATION.DEFAULT_LIMIT } = {}) => {
       sku: variant.sku,
       name: `${variant.productId.name} — ${variant.color}/${variant.size}`,
       stock: variant.stock,
-      status: statusForStock(variant.stock),
+      tracked: Boolean(variant.productId.trackInventory),
+      qikinkSku: variant.qikinkSku || null,
+      status: variant.productId.trackInventory ? statusForStock(variant.stock) : STOCK_STATUS.ON_DEMAND,
     }));
 
   return { doc, meta: { totalRecords: count, page: currentPage, limit: cappedLimit } };

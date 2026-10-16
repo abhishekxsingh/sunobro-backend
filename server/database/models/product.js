@@ -10,6 +10,8 @@ const productSchema = new Schema({
   sizes: { type: [String], default: [] },
   inStock: { type: Boolean, default: true },
   status: { type: String, enum: ['active', 'draft'], default: 'active' },
+  // Print-on-demand items never run out, so stock is only enforced when on.
+  trackInventory: { type: Boolean, default: false },
 }, { timestamps: true });
 
 module.exports = model('Product', productSchema);

@@ -57,7 +57,8 @@ const update = async (req, res) => {
 
     const { doc, errors, type } = await AdminProductsService.update(req.params.id, req.body);
     if (type === 'conflict') return res.conflict('conflict', errors);
-    if (errors) return res.notFound();
+    if (errors?.[0]?.name === 'product') return res.notFound();
+    if (errors) return res.badRequest('field-validation', errors);
     return res.getRequest(doc);
   } catch (error) {
     return res.serverError(error);
@@ -81,8 +82,15 @@ const bulkCreate = async (req, res) => {
       return res.badRequest('field-validation', [{ name: 'products', message: 'products must be a non-empty array.' }]);
     }
 
-    const { doc, errors } = await AdminProductsService.bulkCreate(products);
-    return res.postSuccessfully({ created: doc, errors });
+    const invalid = [];
+    const valid = products.filter((product) => {
+      const { errors } = Validator.isSchemaValid({ data: product, schema: Schemas.admin.products.create });
+      if (errors) invalid.push({ name: product?.name, errors });
+      return !errors;
+    });
+
+    const { doc, errors } = await AdminProductsService.bulkCreate(valid);
+    return res.postSuccessfully({ created: doc, errors: [...invalid, ...errors] });
   } catch (error) {
     return res.serverError(error);
   }

@@ -12,6 +12,7 @@ const correlationId = require('./utils/correlation-id');
 const attachResponseHelpers = require('./utils/middleware/http');
 const logger = require('./utils/logger');
 const routes = require('./routes');
+const startCron = require('./cron');
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1)$/;
 const PRIVATE_HOST = /^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/;
@@ -49,7 +50,13 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
 app.use(cookieParser());
-app.use(express.json());
+// Keep the exact request bytes: Razorpay signs the raw webhook body, and a
+// re-serialised JSON.stringify(req.body) will not match its signature.
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 
 app.use('/', routes);
 
@@ -81,6 +88,7 @@ if (require.main === module) {
       app.listen(PORT, () => {
         logger.info(`server on port ${PORT} (${NODE_ENV})`);
       });
+      startCron();
     })
     .catch((err) => {
       logger.error(err, 'MongoDB connection failed');

@@ -19,48 +19,45 @@ const getClient = () => {
 
 const toPaise = (amount) => Math.round(Number(amount) * 100);
 
+// /payments/verify and the payment.captured webhook can arrive together. The
+// pending → paid flip is a single conditional update so only one of them wins
+// and goes on to push the order to Qikink.
 const markPaidAndFulfill = async (order, paymentId) => {
-  if (order.status === 'paid') {
-    if (paymentId && !order.razorpayPaymentId) {
-      order.razorpayPaymentId = paymentId;
-      await order.save();
+  const paid = await Order.findOneAndUpdate(
+    { _id: order._id, status: 'pending' },
+    {
+      $set: {
+        status: 'paid',
+        razorpayPaymentId: paymentId || order.razorpayPaymentId,
+      },
+      $push: {
+        statusHistory: {
+          status: 'paid',
+          note: 'Payment verified via Razorpay.',
+          createdAt: new Date(),
+        },
+      },
+    },
+    { new: true },
+  );
+
+  if (!paid) {
+    const current = await Order.findById(order._id);
+    if (current && paymentId && !current.razorpayPaymentId) {
+      current.razorpayPaymentId = paymentId;
+      await current.save();
     }
-    return order;
+    return current;
   }
 
-  order.status = 'paid';
-  order.razorpayPaymentId = paymentId || order.razorpayPaymentId;
-  order.statusHistory.push({ status: 'paid', note: 'Payment verified via Razorpay.' });
-  await order.save();
-
   try {
-    const qikinkResult = await QikinkService.createOrderFromPaidOrder(order);
-    if (qikinkResult?.orderId) {
-      order.qikinkOrderId = String(qikinkResult.orderId);
-      order.qikinkOrderNumber = qikinkResult.orderNumber || order.qikinkOrderNumber;
-      order.qikinkStatus = qikinkResult.status || 'submitted';
-      order.qikinkError = undefined;
-      order.statusHistory.push({
-        status: 'paid',
-        note: `Qikink order created: ${order.qikinkOrderId}`,
-      });
-    } else if (qikinkResult?.skipped) {
-      order.qikinkStatus = 'skipped';
-      order.qikinkError = qikinkResult.message;
-    } else if (qikinkResult?.error) {
-      order.qikinkStatus = 'error';
-      order.qikinkError = qikinkResult.error;
-      order.statusHistory.push({
-        status: 'paid',
-        note: `Qikink fulfillment failed: ${qikinkResult.error}`,
-      });
-    }
-    await order.save();
+    const { order: fulfilled } = await QikinkService.fulfillOrder(paid._id);
+    return fulfilled || paid;
   } catch (err) {
-    logger.error({ err, orderId: order.id }, 'qikink-fulfill-failed');
-    order.qikinkStatus = 'error';
-    order.qikinkError = err.message || 'Qikink fulfillment failed';
-    await order.save();
+    // Never fail a verified payment because fulfilment broke — the order stays
+    // paid and can be pushed again from the admin panel.
+    logger.error({ err, orderId: paid.id }, 'qikink-fulfill-failed');
+    return paid;
   }
 
   if (order.shippingEmail) {
@@ -136,13 +133,19 @@ const createOrder = async ({ orderId }) => {
   };
 };
 
-const verifySignature = (paymentOrderId, paymentId, signature) => {
-  const expected = crypto
-    .createHmac('sha256', RAZORPAY.KEY_SECRET)
-    .update(`${paymentOrderId}|${paymentId}`)
-    .digest('hex');
-  return expected === signature;
+// Constant-time HMAC-SHA256 check, shared by checkout verify and the webhook.
+const hmacMatches = (secret, payload, signature) => {
+  if (!secret || !signature || typeof signature !== 'string') return false;
+  const expected = Buffer.from(crypto.createHmac('sha256', secret).update(payload).digest('hex'));
+  const given = Buffer.from(signature);
+  return expected.length === given.length && crypto.timingSafeEqual(expected, given);
 };
+
+const verifySignature = (paymentOrderId, paymentId, signature) => hmacMatches(
+  RAZORPAY.KEY_SECRET,
+  `${paymentOrderId}|${paymentId}`,
+  signature,
+);
 
 const verify = async ({
   orderId, paymentOrderId, paymentId, signature,
@@ -190,5 +193,5 @@ const verify = async ({
 };
 
 module.exports = {
-  createOrder, verify, markPaidAndFulfill, verifySignature,
+  createOrder, verify, markPaidAndFulfill, verifySignature, hmacMatches, toPaise,
 };

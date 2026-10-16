@@ -43,7 +43,10 @@ const orderSchema = new Schema({
   estimatedArrival: { type: String },
   items: { type: [orderItemSchema], default: [] },
   statusHistory: { type: [statusHistorySchema], default: [] },
+  // razorpay = storefront checkout, manual = prepaid collected offline by an
+  // admin, cod = cash on delivery collected by Qikink.
   paymentGateway: { type: String, default: 'razorpay' },
+  source: { type: String, enum: ['storefront', 'admin'], default: 'storefront' },
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
   qikinkOrderId: { type: String },
@@ -53,6 +56,11 @@ const orderSchema = new Schema({
   qikinkAwb: { type: String },
   qikinkTrackingLink: { type: String },
   qikinkCourier: { type: String },
+  qikinkAttempts: { type: Number, default: 0 },
+  qikinkLastAttemptAt: { type: Date },
+  qikinkSyncedAt: { type: Date },
 }, { timestamps: true });
+
+orderSchema.index({ status: 1, qikinkStatus: 1 });
 
 module.exports = model('Order', orderSchema);

@@ -13,7 +13,11 @@ const REFERENCE_RETRIES = 5;
 // Prices/stock are always read fresh from the DB — the client-submitted
 // subtotal/tax/total in CreateOrderPayload are display hints only and are
 // never trusted for the amount actually charged.
-const create = async ({ items, shipping }, customerId) => {
+// `options` lets the admin panel reuse the same pricing/stock rules for orders
+// it creates (offline prepaid or COD), including products still in draft.
+const create = async ({ items, shipping }, customerId, {
+  source = 'storefront', paymentGateway = 'razorpay', allowDraft = false,
+} = {}) => {
   const skus = items.map((item) => item.sku);
 
   const variants = await ProductVariant.find({ sku: { $in: skus } });
@@ -31,16 +35,20 @@ const create = async ({ items, shipping }, customerId) => {
     const item = items[i];
 
     const variant = variantBySku.get(item.sku);
-    if (!variant) {
+    const product = variant && productById.get(variant.productId.toString());
+    if (!variant || !product) {
       failure = { type: 'field-validation', errors: [{ name: 'sku', message: `Unknown SKU: ${item.sku}` }] };
       break;
     }
-    if (variant.stock < item.qty) {
+    if (product.status !== 'active' && !allowDraft) {
+      failure = { type: 'field-validation', errors: [{ name: 'sku', message: `${product.name} is no longer available.` }] };
+      break;
+    }
+    if (product.trackInventory && variant.stock < item.qty) {
       failure = { type: 'conflict', errors: [{ name: 'stock', message: `Insufficient stock for SKU: ${item.sku}` }] };
       break;
     }
 
-    const product = productById.get(variant.productId.toString());
     const price = variant.price ?? product.price;
     subtotal += price * item.qty;
 
@@ -56,8 +64,9 @@ const create = async ({ items, shipping }, customerId) => {
   // transaction — if stock dropped below qty between the read and the
   // update, the update returns null and we roll back any previous decrements.
   const decremented = [];
-  for (let i = 0; i < resolvedItems.length; i += 1) {
-    const { variant, qty } = resolvedItems[i];
+  const tracked = resolvedItems.filter(({ product }) => product.trackInventory);
+  for (let i = 0; i < tracked.length; i += 1) {
+    const { variant, qty } = tracked[i];
     // eslint-disable-next-line no-await-in-loop
     const updated = await ProductVariant.findOneAndUpdate(
       { _id: variant._id, stock: { $gte: qty } },
@@ -85,6 +94,8 @@ const create = async ({ items, shipping }, customerId) => {
         reference: orderReference.generate(),
         customerId: customerId || null,
         status: 'pending',
+        source,
+        paymentGateway,
         subtotal,
         shippingFee: SHIPPING_FEE,
         tax,
