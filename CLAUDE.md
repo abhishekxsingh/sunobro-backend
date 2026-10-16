@@ -7,7 +7,8 @@ Node.js (>=18, Node 24 in CI) / Express 4 / Mongoose 8 / MongoDB Atlas. See `../
 ```bash
 npm run start:dev   # node --watch server.js  (there is NO "dev" script)
 npm start           # production
-npm run db:seed     # database/seed/seed.js
+npm run db:seed     # database/seed/seed.js — WIPES admins + products; never run against production
+ADMIN_EMAIL=… ADMIN_PASSWORD=… npm run admin:create [-- --reset]   # add an admin / reset one password, touches nothing else
 npm test            # eslint (airbnb-base) + mocha/chai-http/nyc on test/
 npm run test-lint   # lint only
 ```
