@@ -35,6 +35,8 @@ module.exports = (req, res, next) => {
 
   res.notImplemented = () => res.status(501).json(jsonError(req, 'not-implemented', [{ message: 'Not implemented.' }]));
 
+  res.unavailable = (type, details) => res.status(503).json(jsonError(req, type, details));
+
   res.serverError = (error) => {
     logger.error({ err: error, correlationId: req.correlationId }, 'unhandled-error');
 

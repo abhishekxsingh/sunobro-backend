@@ -26,4 +26,15 @@ module.exports = {
     CLIENT_SECRET: 'b20cf47796d977fe0ffc2b9249625c94705dd15522ee617df91a395304bcb25e',
     ENV: 'live',
   },
+  FIREBASE: {
+    PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'sunobro',
+    CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
+    PRIVATE_KEY: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/^"|"$/g, '').replace(/\\n/g, '\n'),
+    API_KEY: process.env.FIREBASE_API_KEY || '',
+    AUTH_DOMAIN: process.env.FIREBASE_AUTH_DOMAIN || '',
+    STORAGE_BUCKET: process.env.FIREBASE_STORAGE_BUCKET || '',
+    MESSAGING_SENDER_ID: process.env.FIREBASE_MESSAGING_SENDER_ID || '',
+    APP_ID: process.env.FIREBASE_APP_ID || '',
+    MEASUREMENT_ID: process.env.FIREBASE_MEASUREMENT_ID || '',
+  },
 };

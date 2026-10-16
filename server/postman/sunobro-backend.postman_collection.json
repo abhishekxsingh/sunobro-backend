@@ -153,6 +153,35 @@
           "response": []
         },
         {
+          "name": "Firebase web config",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/auth/firebase-config", "host": ["{{base_url}}"], "path": ["auth", "firebase-config"] },
+            "description": "Public Firebase web config for the storefront. No secrets."
+          },
+          "response": []
+        },
+        {
+          "name": "Login with Firebase",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"{{firebase_id_token}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/firebase", "host": ["{{base_url}}"], "path": ["auth", "firebase"] },
+            "description": "Verifies a Firebase Google ID token and sets the same sb_session cookie as email login."
+          },
+          "response": []
+        },
+        {
           "name": "Me",
           "event": [
             { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
@@ -160,6 +189,28 @@
           "request": {
             "method": "GET",
             "url": { "raw": "{{base_url}}/auth/me", "host": ["{{base_url}}"], "path": ["auth", "me"] }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notify",
+      "item": [
+        {
+          "name": "Join the next drop",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customer_email}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/notify", "host": ["{{base_url}}"], "path": ["notify"] },
+            "description": "Saves an email for the next drop. Repeating the same address still returns 200."
           },
           "response": []
         }

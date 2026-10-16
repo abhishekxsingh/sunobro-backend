@@ -4,6 +4,7 @@ const router = express.Router();
 
 require('./health')(router);
 require('./auth')(router);
+require('./notify')(router);
 require('./admin')(router);
 require('./customer/products')(router);
 require('./customer/orders')(router);

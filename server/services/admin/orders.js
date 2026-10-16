@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { Order } = require('../../database/models');
 const { PAGINATION } = require('../../utils/constant');
 const QikinkService = require('./qikink');
+const emailService = require('../email');
 
 const toQueueOrder = (order) => ({
   id: order.id,
@@ -57,9 +58,13 @@ const updateStatus = async (orderId, { status, note }) => {
   if (!order) {
     return { errors: [{ name: 'order', message: 'Order not found.' }] };
   }
+  const previous = order.status;
   order.status = status;
   order.statusHistory.push({ status, note: note || '' });
   await order.save();
+  if (previous !== status && order.shippingEmail) {
+    emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
+  }
   return { doc: order };
 };
 

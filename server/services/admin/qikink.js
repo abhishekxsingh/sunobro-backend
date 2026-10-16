@@ -1,5 +1,6 @@
 const { Product, ProductVariant } = require('../../database/models');
 const { QIKINK } = require('../../config');
+const emailService = require('../email');
 const logger = require('../../utils/logger');
 
 const USER_AGENT = 'SunoBro/1.0';
@@ -318,7 +319,8 @@ const applyQikinkRow = (order, row) => {
   order.qikinkCourier = shipping.courier_provider_name
     ? String(shipping.courier_provider_name).trim()
     : order.qikinkCourier;
-  if (nextStatus !== order.status) {
+  const changed = nextStatus !== order.status;
+  if (changed) {
     order.status = nextStatus;
     order.statusHistory.push({
       status: nextStatus,
@@ -326,6 +328,7 @@ const applyQikinkRow = (order, row) => {
     });
   }
   /* eslint-enable no-param-reassign */
+  return changed;
 };
 
 const syncOrder = async (order) => {
@@ -344,8 +347,11 @@ const syncOrder = async (order) => {
   try {
     const rows = await listOrders(query);
     if (rows[0]) {
-      applyQikinkRow(order, rows[0]);
+      const changed = applyQikinkRow(order, rows[0]);
       await order.save();
+      if (changed && order.shippingEmail) {
+        emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
+      }
     }
   } catch (err) {
     logger.error({ err, orderId: order.id }, 'qikink-order-list-failed');
