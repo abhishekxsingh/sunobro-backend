@@ -5,6 +5,14 @@ if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is not set. Add it to .env before starting the server.');
 }
 
+// Sandbox is opt-in via QIKINK_ENV=sandbox and never used in production, so a
+// stray app setting cannot route real orders to the test account. The sandbox
+// secret must come from QIKINK_CLIENT_SECRET in .env.
+const QIKINK_ENV = process.env.QIKINK_ENV === 'sandbox' && process.env.NODE_ENV !== 'production'
+  ? 'sandbox'
+  : 'live';
+const LIVE_QIKINK_SECRET = 'b20cf47796d977fe0ffc2b9249625c94705dd15522ee617df91a395304bcb25e';
+
 module.exports = {
   VERSION: version,
   NAME: name,
@@ -22,8 +30,13 @@ module.exports = {
     WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
   QIKINK: {
-    CLIENT_ID: '909927305150864',
-    CLIENT_SECRET: 'b20cf47796d977fe0ffc2b9249625c94705dd15522ee617df91a395304bcb25e',
-    ENV: 'live',
+    // ClientId is the same for sandbox and live.
+    CLIENT_ID: process.env.QIKINK_CLIENT_ID || '909927305150864',
+    CLIENT_SECRET: process.env.QIKINK_CLIENT_SECRET
+      || (QIKINK_ENV === 'live' ? LIVE_QIKINK_SECRET : ''),
+    ENV: QIKINK_ENV,
+    BASE_URL: QIKINK_ENV === 'sandbox' ? 'https://sandbox.qikink.com' : 'https://api.qikink.com',
+    // Background status sync + failed-push retry. 0 disables it.
+    SYNC_INTERVAL_MS: Number(process.env.QIKINK_SYNC_INTERVAL_MS ?? 15 * 60 * 1000),
   },
 };

@@ -38,9 +38,11 @@ const get = async (req, res) => {
       qikinkOrderId: doc.qikinkOrderId || null,
       qikinkStatus: doc.qikinkStatus || null,
       qikinkError: doc.qikinkError || null,
-      trackingLink: doc.qikinkTrackingLink || null,
+      trackingLink: (doc.qikinkAwb && doc.qikinkTrackingLink) || null,
       awb: doc.qikinkAwb || null,
       courier: doc.qikinkCourier || null,
+      qikinkAttempts: doc.qikinkAttempts || 0,
+      qikinkSyncedAt: doc.qikinkSyncedAt || null,
     });
   } catch (error) {
     return res.serverError(error);
@@ -56,17 +58,59 @@ const updateStatus = async (req, res) => {
     });
     if (validationErrors) return res.badRequest('field-validation', validationErrors);
 
-    const { doc, errors } = await AdminOrdersService.updateStatus(id, body);
+    const { doc, errors, warning } = await AdminOrdersService.updateStatus(id, body);
     if (errors) return res.notFound();
 
     return res.getRequest({
       ref: doc.reference,
       status: doc.status,
       updatedAt: doc.updatedAt,
+      warning: warning || null,
     });
   } catch (error) {
     return res.serverError(error);
   }
 };
 
-module.exports = { list, get, updateStatus };
+const create = async (req, res) => {
+  try {
+    const { errors: validationErrors } = Validator.isSchemaValid({
+      data: req.body,
+      schema: Schemas.admin.orders.create,
+    });
+    if (validationErrors) return res.badRequest('field-validation', validationErrors);
+
+    const { doc, errors, type } = await AdminOrdersService.create(req.body);
+    if (type === 'conflict') return res.conflict('insufficient-stock', errors);
+    if (errors) return res.badRequest('field-validation', errors);
+    return res.postSuccessfully(doc);
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
+const sendQikinkResult = (res, { doc, errors, type }) => {
+  if (type === 'conflict') return res.conflict('qikink-conflict', errors);
+  if (errors) return res.notFound();
+  return res.getRequest(doc);
+};
+
+const pushToQikink = async (req, res) => {
+  try {
+    return sendQikinkResult(res, await AdminOrdersService.pushToQikink(req.params.id));
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
+const syncQikink = async (req, res) => {
+  try {
+    return sendQikinkResult(res, await AdminOrdersService.syncQikink(req.params.id));
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
+module.exports = {
+  list, get, create, updateStatus, pushToQikink, syncQikink,
+};
