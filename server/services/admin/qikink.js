@@ -100,7 +100,6 @@ const FULFILMENT = {
   ERROR: 'error',
 };
 
-const LIST_PAGE_SIZE = 10; // fixed per_page on /api/order/list
 const SYNC_TTL_MS = 2 * 60 * 1000; // Qikink allows 60 req/min across the account
 const SUBMIT_LOCK_MS = 2 * 60 * 1000; // a crashed push frees its claim after this
 const MAX_AUTO_ATTEMPTS = 3;
@@ -401,34 +400,28 @@ const isStale = (order, now) => !order.qikinkSyncedAt
   || now - new Date(order.qikinkSyncedAt).getTime() > SYNC_TTL_MS;
 
 /**
- * Refresh Qikink status/tracking for the given orders, in batches of 10 ids
- * per request. Orders synced within SYNC_TTL_MS are skipped unless `force`.
+ * Refresh Qikink status/tracking for the given orders, one `id` lookup each —
+ * live Qikink returns 500 for the documented multi-order `ids` filter. Orders
+ * synced within SYNC_TTL_MS are skipped unless `force`; the cron's 50 orders
+ * per 15 minutes stays far inside the 60 req/min limit.
  */
 const syncOrders = async (orders, { force = false } = {}) => {
   if (!isConfigured()) return orders;
   const now = Date.now();
   const targets = (orders || []).filter((o) => isSyncable(o) && (force || isStale(o, now)));
 
-  for (let i = 0; i < targets.length; i += LIST_PAGE_SIZE) {
-    const chunk = targets.slice(i, i + LIST_PAGE_SIZE);
+  for (let i = 0; i < targets.length; i += 1) {
+    const order = targets[i];
     try {
       // eslint-disable-next-line no-await-in-loop
-      const rows = await listOrders({ ids: chunk.map((o) => o.qikinkOrderId).join(',') });
-      const rowById = new Map(rows.map((row) => [String(row.order_id), row]));
+      const rows = await listOrders({ id: order.qikinkOrderId });
+      const row = rows.find((r) => String(r.order_id) === String(order.qikinkOrderId));
+      if (row) applyQikinkRow(order, row);
+      order.qikinkSyncedAt = new Date();
       // eslint-disable-next-line no-await-in-loop
-      await Promise.all(chunk.map(async (order) => {
-        const row = rowById.get(String(order.qikinkOrderId));
-        if (row) applyQikinkRow(order, row);
-        // eslint-disable-next-line no-param-reassign
-        order.qikinkSyncedAt = new Date();
-        try {
-          await order.save();
-        } catch (err) {
-          logger.error({ err, orderId: order.id }, 'qikink-order-save-failed');
-        }
-      }));
+      await order.save();
     } catch (err) {
-      logger.error({ err, orderIds: chunk.map((o) => o.id) }, 'qikink-order-list-failed');
+      logger.error({ err, orderId: order.id }, 'qikink-order-sync-failed');
     }
   }
   return orders;
