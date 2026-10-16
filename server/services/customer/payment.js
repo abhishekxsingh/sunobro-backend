@@ -50,21 +50,21 @@ const markPaidAndFulfill = async (order, paymentId) => {
     return current;
   }
 
+  let result = paid;
   try {
     const { order: fulfilled } = await QikinkService.fulfillOrder(paid._id);
-    return fulfilled || paid;
+    result = fulfilled || paid;
   } catch (err) {
     // Never fail a verified payment because fulfilment broke — the order stays
     // paid and can be pushed again from the admin panel.
     logger.error({ err, orderId: paid.id }, 'qikink-fulfill-failed');
-    return paid;
   }
 
-  if (order.shippingEmail) {
-    emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
+  if (result.shippingEmail) {
+    emailService.sendOrderStatus({ to: result.shippingEmail, order: result }).catch(() => {});
   }
 
-  return order;
+  return result;
 };
 
 const createOrder = async ({ orderId }) => {

@@ -76,7 +76,6 @@ const updateStatus = async (orderId, { status, note }) => {
   if (previous !== status && order.shippingEmail) {
     emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
   }
-  return { doc: order };
   return { doc: order, warning: needsQikinkCancel ? historyNote : undefined };
 };
 

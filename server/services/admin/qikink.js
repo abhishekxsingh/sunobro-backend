@@ -294,10 +294,9 @@ const applyQikinkRow = (order, row) => {
   order.qikinkCourier = shipping.courier_provider_name
     ? String(shipping.courier_provider_name).trim()
     : order.qikinkCourier;
-  const changed = nextStatus !== order.status;
-  if (changed) {
   order.qikinkError = undefined;
-  if (nextStatus !== order.status || (row.status && row.status !== previousLabel)) {
+  const statusChanged = nextStatus !== order.status;
+  if (statusChanged || (row.status && row.status !== previousLabel)) {
     order.status = nextStatus;
     order.statusHistory.push({
       status: nextStatus,
@@ -305,7 +304,7 @@ const applyQikinkRow = (order, row) => {
     });
   }
   /* eslint-enable no-param-reassign */
-  return changed;
+  return statusChanged;
 };
 
 /**
@@ -353,13 +352,6 @@ const fulfillOrder = async (orderId) => {
   }
 
   try {
-    const rows = await listOrders(query);
-    if (rows[0]) {
-      const changed = applyQikinkRow(order, rows[0]);
-      await order.save();
-      if (changed && order.shippingEmail) {
-        emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
-      }
     const existing = order.qikinkAttempts > 1 ? await findExistingRemoteOrder(order) : null;
     if (existing) {
       applyQikinkRow(order, existing);
@@ -427,10 +419,13 @@ const syncOrders = async (orders, { force = false } = {}) => {
       // eslint-disable-next-line no-await-in-loop
       const rows = await listOrders({ id: order.qikinkOrderId });
       const row = rows.find((r) => String(r.order_id) === String(order.qikinkOrderId));
-      if (row) applyQikinkRow(order, row);
+      const statusChanged = row ? applyQikinkRow(order, row) : false;
       order.qikinkSyncedAt = new Date();
       // eslint-disable-next-line no-await-in-loop
       await order.save();
+      if (statusChanged && order.shippingEmail) {
+        emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
+      }
     } catch (err) {
       logger.error({ err, orderId: order.id }, 'qikink-order-sync-failed');
     }
