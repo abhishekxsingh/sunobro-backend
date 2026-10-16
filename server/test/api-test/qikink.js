@@ -116,12 +116,13 @@ describe('Qikink fulfilment', () => {
     expect((await AdminOrdersService.pushToQikink(pushed.id)).type).to.equal('conflict');
   });
 
-  it('syncs status and tracking in one batched call and honours the sync TTL', async () => {
+  it('syncs status and tracking one id at a time and honours the sync TTL', async () => {
     const listCalls = [];
     fetchStub = stubQikink({
       create: async () => { throw new Error('should not create'); },
       list: async (params) => {
-        listCalls.push(params.get('ids'));
+        listCalls.push(params.get('id'));
+        const id = params.get('id');
         return jsonResponse({
           success: true,
           data: [
@@ -131,7 +132,7 @@ describe('Qikink fulfilment', () => {
               shipping: { awb: 'AWB1', tracking_link: 'https://track/AWB1', courier_provider_name: 'Bluedart ' },
             },
             { order_id: 402, status: 'Delivered', shipping: {} },
-          ],
+          ].filter((row) => String(row.order_id) === id),
         });
       },
     });
@@ -141,7 +142,7 @@ describe('Qikink fulfilment', () => {
     await QikinkService.syncOrders([a, b]);
     await QikinkService.syncOrders([a, b]);
 
-    expect(listCalls).to.deep.equal(['401,402']);
+    expect(listCalls).to.deep.equal(['401', '402']);
     const [savedA, savedB] = await Promise.all([Order.findById(a._id), Order.findById(b._id)]);
     expect(savedA.status).to.equal('shipped');
     expect(savedA.qikinkAwb).to.equal('AWB1');

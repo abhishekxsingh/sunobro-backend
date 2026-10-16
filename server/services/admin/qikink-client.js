@@ -71,7 +71,8 @@ const qikinkHeaders = async () => {
 const LIST_ROUTE = '/api/order/list';
 const LEGACY_ROUTE = '/api/order';
 // The sandbox host has no /api/order/list and its legacy /api/order only
-// accepts a single `id` (`ids` errors, `order_reference_no` is rejected).
+// accepts a single `id` (`order_reference_no` is rejected). Neither host
+// supports the documented multi-order `ids` filter (it returns 500).
 let useLegacyRoute = false;
 
 const toQueryString = (query) => {
@@ -90,15 +91,9 @@ const isMissingRoute = (res, data) => res.status === 404
 
 const listOrdersLegacy = async (query, headers) => {
   if (query.order_reference_no) return [];
-  const ids = query.ids ? String(query.ids).split(',') : [query.id];
-  const rows = [];
-  for (let i = 0; i < ids.length; i += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    const { res, data } = await request(`${LEGACY_ROUTE}${toQueryString({ ...query, ids: undefined, id: ids[i] })}`, { headers });
-    if (!res.ok || data?.error) throw new Error(qikinkMessage(data, res.status));
-    rows.push(...(Array.isArray(data) ? data : data?.data || []));
-  }
-  return rows;
+  const { res, data } = await request(`${LEGACY_ROUTE}${toQueryString(query)}`, { headers });
+  if (!res.ok || data?.error) throw new Error(qikinkMessage(data, res.status));
+  return Array.isArray(data) ? data : data?.data || [];
 };
 
 const listOrders = async (query = {}) => {
