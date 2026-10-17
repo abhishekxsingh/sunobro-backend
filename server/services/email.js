@@ -3,6 +3,7 @@ const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 
 const FROM = process.env.FROM_EMAIL || 'SunoBro <orders@sunobro.com>';
+const SITE = 'https://www.sunobro.com';
 
 let resendClient = null;
 const getResend = () => {
@@ -34,42 +35,99 @@ const deliver = async ({ to, subject, html }) => {
   if (smtp) {
     const from = process.env.SMTP_FROM || `SunoBro <${process.env.SMTP_USER}>`;
     await smtp.sendMail({
-      from,
-      to,
-      subject,
-      html,
+      from, to, subject, html,
     });
     return;
   }
 
   const resend = getResend();
   if (!resend) return;
-  await resend.emails.send({
-    from: FROM,
-    to,
-    subject,
-    html,
+  const result = await resend.emails.send({
+    from: FROM, to, subject, html,
   });
+  if (result && result.error) {
+    const error = new Error(result.error.message || 'Email was rejected');
+    error.code = 'MAIL_REJECTED';
+    throw error;
+  }
 };
 
-const money = (n, cur = 'INR') => `${cur === 'INR' ? '₹' : '$'}${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+const money = (n, cur = 'INR') => {
+  const symbol = cur === 'INR' ? '₹' : '$';
+  const amount = Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+  return `${symbol}${amount}`;
+};
 
-const baseStyle = `
-  body { font-family: 'Courier New', monospace; background: #0f0f14; color: #ebebf5; margin: 0; padding: 0; }
-  .wrap { max-width: 600px; margin: 0 auto; padding: 40px 24px; }
-  .logo { font-size: 20px; font-weight: bold; letter-spacing: 2px; color: #c5c9f5; margin-bottom: 32px; }
-  .divider { border: none; border-top: 1px solid #2a2a3d; margin: 24px 0; }
-  .label { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #8888aa; }
-  .value { font-size: 14px; color: #ebebf5; margin-top: 4px; }
-  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-  th { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #8888aa; text-align: left; padding: 8px 0; border-bottom: 1px solid #2a2a3d; }
-  td { font-size: 13px; padding: 10px 0; border-bottom: 1px solid #1a1a2a; vertical-align: top; }
-  .total-row td { border-top: 1px solid #2a2a3d; border-bottom: none; font-weight: bold; padding-top: 16px; font-size: 16px; }
-  .badge { display: inline-block; padding: 2px 8px; background: #1e2a1e; color: #7ec87e;
-    font-size: 10px; letter-spacing: 1px; text-transform: uppercase; border: 1px solid #2a3d2a; }
-  .footer { font-size: 11px; color: #555570; margin-top: 40px; }
-  a { color: #c5c9f5; }
-`;
+const esc = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+const button = (href, label) => `
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 4px">
+  <tr>
+    <td style="background:#c9d2ff;">
+      <a href="${esc(href)}"
+        style="display:inline-block;padding:14px 22px;font-family:Arial,Helvetica,sans-serif;
+        font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;
+        color:#1c2140;text-decoration:none;">
+        ${esc(label)}
+      </a>
+    </td>
+  </tr>
+</table>`;
+
+const frame = ({
+  preheader, eyebrow, title, intro, bodyHtml, ctaHref, ctaLabel,
+}) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${esc(title)}</title>
+</head>
+<body style="margin:0;padding:0;background:#101218;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+    ${esc(preheader)}
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#101218;">
+    <tr>
+      <td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+          style="max-width:560px;background:#171a22;border:1px solid #2c3140;">
+          <tr>
+            <td style="height:4px;background:#c9d2ff;font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:32px 28px 28px;font-family:Arial,Helvetica,sans-serif;color:#eceef6;">
+              <p style="margin:0 0 28px;font-size:13px;letter-spacing:0.22em;font-weight:700;color:#c9d2ff;">
+                SUNOBRO
+              </p>
+              <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#9aa0b5;">
+                ${esc(eyebrow)}
+              </p>
+              <h1 style="margin:0 0 14px;font-size:32px;line-height:1.15;font-weight:700;color:#ffffff;">
+                ${esc(title)}
+              </h1>
+              <p style="margin:0;font-size:15px;line-height:1.7;color:#c5cad8;">
+                ${esc(intro)}
+              </p>
+              ${bodyHtml || ''}
+              ${ctaHref ? button(ctaHref, ctaLabel) : ''}
+              <p style="margin:28px 0 0;padding-top:20px;border-top:1px solid #2c3140;
+                font-size:12px;line-height:1.7;color:#7d8498;">
+                240+ GSM · Print on demand · Ships across India<br>
+                <a href="${SITE}" style="color:#c9d2ff;text-decoration:none;">www.sunobro.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 
 const sendOrderConfirmation = async ({ to, order }) => {
   if (!mailConfigured()) {
@@ -79,46 +137,52 @@ const sendOrderConfirmation = async ({ to, order }) => {
 
   const itemRows = order.items.map((item) => `
     <tr>
-      <td>${item.name}<br><span style="color:#8888aa;font-size:11px">${item.size} / ${item.color}</span></td>
-      <td style="text-align:center">${item.qty}</td>
-      <td style="text-align:right">${money(item.price * item.qty, order.currency)}</td>
-    </tr>
-  `).join('');
+      <td style="padding:10px 0;border-bottom:1px solid #2c3140;font-size:14px;color:#eceef6;">
+        ${esc(item.name)}<br>
+        <span style="color:#9aa0b5;font-size:12px">${esc(item.size)} / ${esc(item.color)}</span>
+      </td>
+      <td style="padding:10px 8px;border-bottom:1px solid #2c3140;text-align:center;color:#c5cad8;">
+        ${esc(item.qty)}
+      </td>
+      <td style="padding:10px 0;border-bottom:1px solid #2c3140;text-align:right;color:#eceef6;">
+        ${esc(money(item.price * item.qty, order.currency))}
+      </td>
+    </tr>`).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
-  <body><div class="wrap">
-    <div class="logo">// SUNOBRO</div>
-    <h1 style="font-size:24px;margin:0 0 8px">Order Confirmed</h1>
-    <p style="color:#8888aa;font-size:13px;margin:0 0 32px">
-      Reference: <strong style="color:#c5c9f5">${order.reference}</strong>
-      &nbsp;<span class="badge">PENDING</span>
-    </p>
-    <hr class="divider">
-    <table>
-      <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Subtotal</th></tr></thead>
-      <tbody>${itemRows}</tbody>
-      <tfoot>
-        <tr class="total-row">
-          <td colspan="2">Total</td>
-          <td style="text-align:right">${money(order.total, order.currency)}</td>
-        </tr>
-      </tfoot>
+  const bodyHtml = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+      <tr>
+        <td style="padding:0 0 8px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9aa0b5;">Item</td>
+        <td style="padding:0 8px 8px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9aa0b5;text-align:center;">Qty</td>
+        <td style="padding:0 0 8px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9aa0b5;text-align:right;">Subtotal</td>
+      </tr>
+      ${itemRows}
+      <tr>
+        <td colspan="2" style="padding-top:16px;font-size:16px;font-weight:700;color:#ffffff;">Total</td>
+        <td style="padding-top:16px;text-align:right;font-size:16px;font-weight:700;color:#c9d2ff;">
+          ${esc(money(order.total, order.currency))}
+        </td>
+      </tr>
     </table>
-    <hr class="divider">
-    <div class="label">Shipping to</div>
-    <div class="value" style="margin-top:8px">
-      ${order.shippingFirstName} ${order.shippingLastName}<br>
-      ${order.shippingStreet}<br>
-      ${order.shippingCity}, ${order.shippingPostalCode}<br>
-      ${order.shippingCountry}
-    </div>
-    <hr class="divider">
-    <p class="footer">
-      You'll receive another email when your order ships.<br>
-      Questions? Reply to this email or visit sunobro.com.<br><br>
-      — SunoBro Technical Ops
+    <p style="margin:24px 0 0;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#9aa0b5;">
+      Shipping to
     </p>
-  </div></body></html>`;
+    <p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#eceef6;">
+      ${esc(order.shippingFirstName)} ${esc(order.shippingLastName)}<br>
+      ${esc(order.shippingStreet)}<br>
+      ${esc(order.shippingCity)}, ${esc(order.shippingPostalCode)}<br>
+      ${esc(order.shippingCountry)}
+    </p>`;
+
+  const html = frame({
+    preheader: `Order ${order.reference} is confirmed.`,
+    eyebrow: 'Order',
+    title: 'Order confirmed.',
+    intro: `Reference ${order.reference}. We'll write again when it ships.`,
+    bodyHtml,
+    ctaHref: `${SITE}/account`,
+    ctaLabel: 'View your orders',
+  });
 
   try {
     await deliver({ to, subject: `Order confirmed — ${order.reference}`, html });
@@ -133,19 +197,14 @@ const sendWelcome = async ({ to, name }) => {
     return;
   }
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
-  <body><div class="wrap">
-    <div class="logo">// SUNOBRO</div>
-    <h1 style="font-size:24px;margin:0 0 8px">Welcome, ${name}.</h1>
-    <p style="color:#8888aa;font-size:13px;margin:0 0 32px">Your account is active.</p>
-    <hr class="divider">
-    <p style="font-size:14px;line-height:1.7">
-      You're now part of the SunoBro network. Browse our technical goods collection,
-      track your orders, and manage your profile at any time.
-    </p>
-    <hr class="divider">
-    <p class="footer">— SunoBro Technical Ops</p>
-  </div></body></html>`;
+  const html = frame({
+    preheader: `Welcome to SunoBro, ${name}. Your account is ready.`,
+    eyebrow: 'Welcome',
+    title: `Welcome, ${name}.`,
+    intro: 'Your account is active. Orders, saved addresses, and the next drop all live in one place.',
+    ctaHref: `${SITE}/account`,
+    ctaLabel: 'Open your account',
+  });
 
   try {
     await deliver({ to, subject: 'Welcome to SunoBro', html });
@@ -161,22 +220,23 @@ const sendDropNotice = async ({ to }) => {
     throw error;
   }
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
-  <body><div class="wrap">
-    <div class="logo">// SUNOBRO</div>
-    <h1 style="font-size:24px;margin:0 0 8px">You're on the list.</h1>
-    <p style="color:#8888aa;font-size:13px;margin:0 0 32px">Next drop · early notice</p>
-    <hr class="divider">
-    <p style="font-size:14px;line-height:1.7">
-      We'll email this address when the next technical piece goes live.
-    </p>
-    <hr class="divider">
-    <p class="footer">— SunoBro Technical Ops</p>
-  </div></body></html>`;
+  const html = frame({
+    preheader: "Welcome. You're on the list for the next SunoBro drop.",
+    eyebrow: 'Welcome',
+    title: "You're in.",
+    intro: 'This address is saved. When a new tee or hoodie goes live, you hear it here first.',
+    bodyHtml: `
+      <p style="margin:18px 0 0;font-size:15px;line-height:1.7;color:#c5cad8;">
+        The current collection is already up. Heavyweight organic fabric, printed when you order,
+        shipped across India.
+      </p>`,
+    ctaHref: `${SITE}/products`,
+    ctaLabel: 'Shop the collection',
+  });
 
   await deliver({
     to,
-    subject: "You're on the list for the next SunoBro drop",
+    subject: "Welcome — you're on the SunoBro list",
     html,
   });
 };
@@ -184,22 +244,22 @@ const sendDropNotice = async ({ to }) => {
 const STATUS_MAIL = {
   paid: {
     subject: (reference) => `Payment received — ${reference}`,
-    title: 'Payment received',
+    title: 'Payment received.',
     body: 'Your payment is confirmed. The order is queued for production.',
   },
   shipped: {
     subject: (reference) => `Shipped — ${reference}`,
-    title: 'Your order has shipped',
+    title: 'Your order has shipped.',
     body: 'The parcel is with the courier.',
   },
   delivered: {
     subject: (reference) => `Delivered — ${reference}`,
-    title: 'Delivered',
+    title: 'Delivered.',
     body: 'Your order was delivered.',
   },
   cancelled: {
     subject: (reference) => `Order cancelled — ${reference}`,
-    title: 'Order cancelled',
+    title: 'Order cancelled.',
     body: 'This order was cancelled. If you were charged, the refund follows the refund policy.',
   },
 };
@@ -213,23 +273,25 @@ const sendOrderStatus = async ({ to, order }) => {
   }
 
   const tracking = order.qikinkTrackingLink
-    ? `<p style="font-size:14px"><a href="${order.qikinkTrackingLink}">Track shipment</a></p>`
+    ? `<p style="margin:18px 0 0;font-size:14px;">
+        <a href="${esc(order.qikinkTrackingLink)}" style="color:#c9d2ff;">Track shipment</a>
+      </p>`
     : '';
   const courier = order.qikinkCourier
-    ? `<p style="color:#8888aa;font-size:13px">${order.qikinkCourier}${order.qikinkAwb ? ` · ${order.qikinkAwb}` : ''}</p>`
+    ? `<p style="margin:12px 0 0;font-size:13px;color:#9aa0b5;">
+        ${esc(order.qikinkCourier)}${order.qikinkAwb ? ` · ${esc(order.qikinkAwb)}` : ''}
+      </p>`
     : '';
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${baseStyle}</style></head>
-  <body><div class="wrap">
-    <div class="logo">// SUNOBRO</div>
-    <h1 style="font-size:24px;margin:0 0 8px">${copy.title}</h1>
-    <p style="color:#8888aa;font-size:13px;margin:0 0 32px">Reference: <strong style="color:#c5c9f5">${order.reference}</strong></p>
-    <hr class="divider">
-    <p style="font-size:14px;line-height:1.7">${copy.body}</p>
-    ${courier}
-    ${tracking}
-    <hr class="divider">
-    <p class="footer">— SunoBro Technical Ops</p>
-  </div></body></html>`;
+
+  const html = frame({
+    preheader: `${copy.title} ${order.reference}`,
+    eyebrow: 'Order',
+    title: copy.title,
+    intro: `${copy.body} Reference ${order.reference}.`,
+    bodyHtml: `${courier}${tracking}`,
+    ctaHref: order.qikinkTrackingLink || `${SITE}/account`,
+    ctaLabel: order.qikinkTrackingLink ? 'Track shipment' : 'View your orders',
+  });
 
   try {
     await deliver({ to, subject: copy.subject(order.reference), html });
