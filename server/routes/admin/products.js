@@ -14,6 +14,8 @@ module.exports = (router) => {
   router.post('/admin/products', requireAdmin, AdminProductsController.create);
   router.put('/admin/products/:id', requireAdmin, AdminProductsController.update);
   router.put('/admin/products/:id/availability', requireAdmin, AdminProductsController.setAvailability);
+  router.post('/admin/products/:id/variants', requireAdmin, AdminProductsController.addVariants);
+  router.put('/admin/products/:id/colour-image', requireAdmin, AdminProductsController.setColourImage);
   router.delete('/admin/products/:id', requireAdmin, AdminProductsController.remove);
   router.post('/admin/products/:id/sync-qikink', requireAdmin, AdminProductsController.syncQikink);
 };
