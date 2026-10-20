@@ -8,6 +8,7 @@ const variantItem = {
     price: { type: 'number', minimum: 0 },
     qikinkSku: { type: 'string' },
     image: { type: 'string' },
+    qikinkCost: { type: 'number', minimum: 0 },
   },
   required: ['size', 'color'],
   additionalProperties: false,

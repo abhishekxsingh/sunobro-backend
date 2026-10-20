@@ -14,6 +14,8 @@ const productVariantSchema = new Schema({
   // Switched off by an admin (whole colour or one size): hidden from the
   // storefront and not orderable. Survives sheet re-imports.
   enabled: { type: Boolean, default: true },
+  // What Qikink charges for this variant (₹, incl. shipping & tax) — for margins.
+  qikinkCost: { type: Number },
 }, { timestamps: true });
 
 module.exports = model('ProductVariant', productVariantSchema);

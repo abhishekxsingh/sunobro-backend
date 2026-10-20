@@ -21,6 +21,9 @@ const PRODUCT_COLUMNS = {
   cover: (h) => h.startsWith('cover image'),
   more: (h) => h.startsWith('more image'),
   slug: (h) => h.includes('slug'),
+  qikinkProductId: (h) => h.startsWith('qikink product id'),
+  design: (h) => h === 'design name',
+  printSize: (h) => h.startsWith('print size'),
 };
 
 const VARIANT_COLUMNS = {
@@ -30,6 +33,7 @@ const VARIANT_COLUMNS = {
   storeSku: (h) => h.includes('store sku'),
   image: (h) => h.startsWith('colour image') || h.startsWith('color image'),
   price: (h) => h.startsWith('price override'),
+  cost: (h) => h.startsWith('qikink cost'),
 };
 
 const cellText = (cell) => {
@@ -118,6 +122,9 @@ const parseWorkbook = async (buffer) => {
         price: price || 0,
         currency: 'INR',
         slug: row.slug || undefined,
+        qikinkProductId: row.qikinkProductId || undefined,
+        qikinkDesign: row.design || undefined,
+        qikinkPrintSize: row.printSize || undefined,
         images: [row.cover, ...String(row.more || '').split('|')].map((s) => s.trim()).filter(Boolean),
         variants: [],
       },
@@ -150,6 +157,7 @@ const parseWorkbook = async (buffer) => {
       qikinkSku: row.storeSku || undefined,
       image: row.image || '',
       price: toNumber(row.price),
+      qikinkCost: toNumber(row.cost),
     });
   });
 
@@ -166,6 +174,10 @@ const parseWorkbook = async (buffer) => {
 };
 
 const findExisting = async (payload) => {
+  if (payload.qikinkProductId) {
+    const linked = await Product.findOne({ qikinkProductId: payload.qikinkProductId });
+    if (linked) return linked;
+  }
   const slug = payload.slug || AdminProductsService.generateSlug(payload.name);
   return Product.findOne({ $or: [{ slug }, { name: payload.name }] });
 };
