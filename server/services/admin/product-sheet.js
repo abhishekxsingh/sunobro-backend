@@ -18,7 +18,6 @@ const PRODUCT_COLUMNS = {
   name: (h) => h === 'product name',
   description: (h) => h.startsWith('description'),
   price: (h) => h.startsWith('selling price'),
-  status: (h) => h === 'status',
   cover: (h) => h.startsWith('cover image'),
   more: (h) => h.startsWith('more image'),
   slug: (h) => h.includes('slug'),
@@ -108,11 +107,8 @@ const parseWorkbook = async (buffer) => {
       problems.push({ where, message: `"${row.name}" appears twice on Products.` });
       return;
     }
-    const status = (row.status || 'draft').toLowerCase();
     const price = toNumber(row.price);
     if (!price) problems.push({ where, message: `Selling price for "${row.name}" must be a number above 0.` });
-    if (!['active', 'draft'].includes(status)) problems.push({ where, message: `Status must be active or draft, not "${row.status}".` });
-    if (status === 'active' && !row.cover) problems.push({ where, message: `"${row.name}" needs a cover image to be active.` });
 
     byName.set(key, {
       line: row.line,
@@ -121,7 +117,6 @@ const parseWorkbook = async (buffer) => {
         description: row.description || '',
         price: price || 0,
         currency: 'INR',
-        status,
         slug: row.slug || undefined,
         images: [row.cover, ...String(row.more || '').split('|')].map((s) => s.trim()).filter(Boolean),
         variants: [],
@@ -207,7 +202,9 @@ const importSheet = async (buffer, { dryRun = true } = {}) => {
     const mapped = payload.variants.filter((v) => v.qikinkSku).length;
     return {
       name: payload.name,
-      status: payload.status,
+      // The sheet never publishes: new products land in review, existing
+      // ones keep whatever status an admin gave them.
+      status: existing?.status || 'review',
       price: payload.price,
       variants: payload.variants.length,
       mapped,
@@ -222,7 +219,8 @@ const importSheet = async (buffer, { dryRun = true } = {}) => {
   plan.filter((p) => p.status === 'active' && p.mapped < p.variants)
     .forEach((p) => problems.push({
       where: p.name,
-      message: `Set to active but ${p.variants - p.mapped} variant(s) have no Store SKU — fill them or set status to draft.`,
+      message: `This product is live, so every row needs a Store SKU (${p.variants - p.mapped} missing). `
+        + 'Fill them, or set the product to draft in admin first.',
     }));
 
   const summary = plan.map(({ payload, existingId, ...rest }) => rest);

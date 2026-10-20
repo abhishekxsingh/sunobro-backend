@@ -96,6 +96,24 @@ const bulkCreate = async (req, res) => {
   }
 };
 
+// Body: { color, size?, enabled } — size omitted switches the whole colour.
+const setAvailability = async (req, res) => {
+  try {
+    const { color, size, enabled } = req.body || {};
+    if (typeof color !== 'string' || !color.trim() || typeof enabled !== 'boolean'
+      || (size !== undefined && typeof size !== 'string')) {
+      return res.badRequest('field-validation', [{ name: 'body', message: 'Send { color, size?, enabled: true|false }.' }]);
+    }
+    const { doc, errors, type } = await AdminProductsService.setAvailability(req.params.id, { color, size, enabled });
+    if (type === 'conflict') return res.conflict('conflict', errors);
+    if (errors?.[0]?.name === 'product') return res.notFound();
+    if (errors) return res.badRequest('field-validation', errors);
+    return res.getRequest(doc);
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
 const syncQikink = async (req, res) => {
   try {
     const result = await QikinkService.syncProduct(req.params.id);
@@ -106,5 +124,5 @@ const syncQikink = async (req, res) => {
 };
 
 module.exports = {
-  list, get, create, update, remove, bulkCreate, syncQikink,
+  list, get, create, update, remove, bulkCreate, syncQikink, setAvailability,
 };

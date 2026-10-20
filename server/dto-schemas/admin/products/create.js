@@ -28,7 +28,7 @@ module.exports = {
     stock: { type: 'integer', minimum: 0 },
     qikinkSku: { type: 'string' },
     variants: { type: 'array', items: variantItem },
-    status: { type: 'string', enum: ['active', 'draft'] },
+    status: { type: 'string', enum: ['review', 'active', 'draft'] },
     trackInventory: { type: 'boolean' },
   },
   required: ['name', 'price'],

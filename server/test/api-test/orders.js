@@ -28,6 +28,7 @@ describe('Orders', () => {
       currency: 'INR',
       images: [],
       sizes: ['M'],
+      status: 'active',
       // These tests cover stock enforcement, which only applies when tracked.
       trackInventory: true,
     });
