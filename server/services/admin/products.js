@@ -49,6 +49,8 @@ const normalizeVariants = (slug, payload) => {
     stock: v.stock ?? payload.stock,
     price: v.price ?? undefined,
     qikinkSku: v.qikinkSku?.trim() || undefined,
+    // undefined = leave the stored image alone; '' = clear it.
+    image: v.image === undefined ? undefined : String(v.image).trim(),
   }));
 };
 
@@ -217,6 +219,7 @@ const syncVariants = async (product, rows) => {
     current.qikinkSku = row.qikinkSku;
     current.price = row.price;
     if (row.stock !== undefined) current.stock = row.stock;
+    if (row.image !== undefined) current.image = row.image || undefined;
     return current.save();
   }));
 
@@ -300,5 +303,13 @@ const bulkCreate = async (products) => {
 };
 
 module.exports = {
-  list, get, create, update, remove, bulkCreate,
+  list,
+  get,
+  create,
+  update,
+  remove,
+  bulkCreate,
+  generateSlug,
+  variantKey,
+  validateVariants,
 };

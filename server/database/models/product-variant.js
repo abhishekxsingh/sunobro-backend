@@ -8,6 +8,9 @@ const productVariantSchema = new Schema({
   stock: { type: Number, required: true, default: 0 },
   price: { type: Number },
   qikinkSku: { type: String },
+  // Mockup for this variant's colour; shown on the product page when the
+  // colour is picked. Empty means the product's cover image.
+  image: { type: String },
 }, { timestamps: true });
 
 module.exports = model('ProductVariant', productVariantSchema);
