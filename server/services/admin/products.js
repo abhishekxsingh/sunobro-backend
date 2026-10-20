@@ -329,6 +329,85 @@ const setAvailability = async (id, { color, size, enabled }) => {
   return { doc: toDTO(product, saved) };
 };
 
+/**
+ * Add one colour's sizes (a new colour, or new sizes on an existing one).
+ * Body: { color, image?, sizes: [{ size, qikinkSku?, price? }] }. On a live
+ * product every new option needs its Qikink Store SKU.
+ */
+const addVariants = async (id, { color, image, sizes }) => {
+  if (invalidId(id)) return { errors: [{ name: 'product', message: 'Product not found.' }] };
+  const product = await Product.findById(id);
+  if (!product) return { errors: [{ name: 'product', message: 'Product not found.' }] };
+
+  const colour = String(color || '').trim();
+  const rows = (sizes || []).map((s) => ({
+    color: colour,
+    size: String(s.size || '').trim(),
+    qikinkSku: String(s.qikinkSku || '').trim() || undefined,
+    price: s.price ?? undefined,
+  })).filter((r) => r.size);
+  if (!colour || !rows.length) {
+    return { errors: [{ name: 'variants', message: 'Give a colour and at least one size.' }] };
+  }
+
+  const existing = await ProductVariant.find({ productId: product._id });
+  const existingKeys = new Set(existing.map((v) => variantKey(v.size, v.color)));
+  const clash = rows.find((r) => existingKeys.has(variantKey(r.size, r.color)));
+  if (clash) return conflict('variants', `${clash.color} / ${clash.size} is already on this product.`);
+
+  const wrongSku = rows.find((r) => r.qikinkSku && !r.qikinkSku.startsWith('v-'));
+  if (wrongSku) {
+    return { errors: [{ name: 'qikinkSku', message: `"${wrongSku.qikinkSku}" is not a Qikink Store SKU (those start with v-).` }] };
+  }
+  const usedSkus = new Set(existing.map((v) => v.qikinkSku).filter(Boolean));
+  const dupSku = rows.find((r, i) => r.qikinkSku
+    && (usedSkus.has(r.qikinkSku) || rows.findIndex((o) => o.qikinkSku === r.qikinkSku) !== i));
+  if (dupSku) return conflict('qikinkSku', `Store SKU ${dupSku.qikinkSku} is already used by another option.`);
+  if (product.status === 'active' && rows.some((r) => !r.qikinkSku)) {
+    return conflict('qikinkSku', 'This product is live — every new size needs its Qikink Store SKU.');
+  }
+
+  // A new size on an existing colour reuses that colour's image.
+  const colourImage = image !== undefined
+    ? String(image).trim()
+    : existing.find((v) => v.color.toLowerCase() === colour.toLowerCase() && v.image)?.image;
+  const docs = rows.map((r) => ({
+    ...r,
+    productId: product._id,
+    sku: defaultSku(product.slug, r.size, r.color),
+    image: colourImage || undefined,
+    stock: 0,
+  }));
+  const taken = await skuTakenElsewhere(docs, product._id);
+  if (taken) return taken;
+
+  await ProductVariant.insertMany(docs);
+  product.sizes = [...new Set([...product.sizes, ...rows.map((r) => r.size)])];
+  if (!product.images.length && colourImage) product.images = [colourImage];
+  await product.save();
+  const saved = await ProductVariant.find({ productId: product._id });
+  return { doc: toDTO(product, saved) };
+};
+
+/** Set (or clear, with '') the image for every size of one colour. */
+const setColourImage = async (id, { color, image }) => {
+  if (invalidId(id)) return { errors: [{ name: 'product', message: 'Product not found.' }] };
+  const product = await Product.findById(id);
+  if (!product) return { errors: [{ name: 'product', message: 'Product not found.' }] };
+  const link = String(image || '').trim();
+  if (link && !/^https?:\/\//.test(link)) {
+    return { errors: [{ name: 'image', message: 'Use a full image link starting with https://.' }] };
+  }
+  const colourRe = new RegExp(`^${String(color).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+  const result = await ProductVariant.updateMany(
+    { productId: product._id, color: colourRe },
+    link ? { $set: { image: link } } : { $unset: { image: 1 } },
+  );
+  if (!result.matchedCount) return { errors: [{ name: 'color', message: `No ${color} on this product.` }] };
+  const saved = await ProductVariant.find({ productId: product._id });
+  return { doc: toDTO(product, saved) };
+};
+
 const remove = async (id) => {
   if (invalidId(id)) return { errors: [{ name: 'product', message: 'Product not found.' }] };
   const product = await Product.findByIdAndDelete(id);
@@ -365,6 +444,8 @@ module.exports = {
   remove,
   bulkCreate,
   setAvailability,
+  addVariants,
+  setColourImage,
   generateSlug,
   variantKey,
   validateVariants,
