@@ -51,6 +51,7 @@ const normalizeVariants = (slug, payload) => {
     qikinkSku: v.qikinkSku?.trim() || undefined,
     // undefined = leave the stored image alone; '' = clear it.
     image: v.image === undefined ? undefined : String(v.image).trim(),
+    qikinkCost: v.qikinkCost ?? undefined,
   }));
 };
 
@@ -218,11 +219,14 @@ const syncVariants = async (product, rows) => {
     await ProductVariant.deleteMany({ _id: { $in: removed.map((v) => v._id) } });
   }
 
+  const added = rows.filter((row) => !existingByKey.has(variantKey(row.size, row.color)));
+  if (added.length) {
+    await ProductVariant.insertMany(added.map((row) => ({ ...row, productId: product._id })));
+  }
+
   await Promise.all(rows.map(async (row) => {
     const current = existingByKey.get(variantKey(row.size, row.color));
-    if (!current) {
-      return ProductVariant.create({ ...row, productId: product._id });
-    }
+    if (!current) return null;
     current.size = row.size;
     current.color = row.color;
     current.sku = row.sku;
@@ -230,6 +234,7 @@ const syncVariants = async (product, rows) => {
     current.price = row.price;
     if (row.stock !== undefined) current.stock = row.stock;
     if (row.image !== undefined) current.image = row.image || undefined;
+    if (row.qikinkCost !== undefined) current.qikinkCost = row.qikinkCost;
     return current.save();
   }));
 

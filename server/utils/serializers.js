@@ -119,6 +119,7 @@ const toVariantDTO = (variant) => ({
   qikinkSku: variant.qikinkSku ?? null,
   image: variant.image ?? null,
   enabled: variant.enabled !== false,
+  qikinkCost: variant.qikinkCost ?? null,
 });
 
 // Print-on-demand variants (trackInventory off) are always available and
@@ -147,6 +148,14 @@ const toFullProductDTO = (product, variants = []) => ({
   trackInventory: Boolean(product.trackInventory),
   mappedCount: product.mappedCount ?? variants.filter((v) => Boolean(v.qikinkSku)).length,
   enabledCount: product.enabledCount ?? variants.filter((v) => v.enabled !== false).length,
+  qikink: {
+    productId: product.qikinkProductId ?? null,
+    design: product.qikinkDesign ?? null,
+    printSize: product.qikinkPrintSize ?? null,
+    colourCount: product.qikinkColourCount ?? null,
+    sizeRange: product.qikinkSizeRange ?? null,
+    expectedVariants: product.qikinkExpectedVariants ?? null,
+  },
   variantCount: product.variantCount ?? variants.length,
   totalStock: product.totalStock ?? variants.reduce((sum, v) => sum + v.stock, 0),
   qikinkSynced: product.qikinkSynced ?? variants.every((v) => Boolean(v.qikinkSku)),
