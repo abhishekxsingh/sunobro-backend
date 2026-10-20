@@ -7,6 +7,7 @@ const variantItem = {
     stock: { type: 'integer', minimum: 0 },
     price: { type: 'number', minimum: 0 },
     qikinkSku: { type: 'string' },
+    image: { type: 'string' },
   },
   required: ['size', 'color'],
   additionalProperties: false,

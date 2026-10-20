@@ -117,6 +117,7 @@ const toVariantDTO = (variant) => ({
   stock: variant.stock,
   price: variant.price ?? null,
   qikinkSku: variant.qikinkSku ?? null,
+  image: variant.image ?? null,
 });
 
 // Print-on-demand variants (trackInventory off) are always available and
@@ -129,6 +130,7 @@ const toCustomerVariantDTO = (variant, trackInventory = true) => ({
   stock: trackInventory ? variant.stock : null,
   available: trackInventory ? variant.stock > 0 : true,
   price: variant.price ?? null,
+  image: variant.image ?? null,
 });
 
 const toProductWithVariantsDTO = (product, variants = []) => ({

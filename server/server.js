@@ -53,6 +53,8 @@ app.use(cookieParser());
 // Keep the exact request bytes: Razorpay signs the raw webhook body, and a
 // re-serialised JSON.stringify(req.body) will not match its signature.
 app.use(express.json({
+  // Room for a base64 product sheet on POST /admin/products/import.
+  limit: '5mb',
   verify: (req, res, buf) => {
     req.rawBody = buf;
   },

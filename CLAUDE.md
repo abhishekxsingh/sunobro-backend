@@ -67,7 +67,8 @@ Register static paths (`/orders/me`, `/admin/products/bulk`) **before** `/:id` r
 
 ## Data model notes
 
-- `Product` holds display data + base `price`; `ProductVariant` (size × color) holds `sku` (unique), `stock`, optional `price` override, and `qikinkSku`. Order items are keyed by `sku`.
+- `Product` holds display data + base `price`; `ProductVariant` (size × color) holds `sku` (unique), `stock`, optional `price` override, `qikinkSku` (= Qikink **Store SKU** `v-…`, never the Product SKU) and optional colour `image`. Order items are keyed by `sku`.
+- `POST /admin/products/import` `{ file: <base64 .xlsx>, dryRun }` — `services/admin/product-sheet.js` parses SunoBro-Product-Sheet.xlsx (Products + Variants tabs, headers matched loosely), returns problems + a per-product plan; with `dryRun: false` and no problems it creates/updates via the products service (match by slug, then name; variants by colour + size).
 - Admin product create/update takes explicit `variants[]` (`size`, `color`, `qikinkSku`, optional `sku`/`price`/`stock`). Update syncs variants **in place** by size+colour (SKUs, ids, stock survive). Validation: no duplicate size/colour, SKU or Qikink SKU; `status: active` requires every variant mapped (409 otherwise); omitted status → active if fully mapped else draft. Legacy `sizes × colors + qikinkSku` base only fills Qikink SKUs for single-colour products.
 - `Product.trackInventory` (default false = print-on-demand): stock is only checked/decremented when true. Customer variant DTO returns `stock: null, available: true` for untracked products; inventory shows `ON_DEMAND`.
 - `customer/orders.create(payload, customerId, { source, paymentGateway, allowDraft })` is shared by storefront checkout and `admin/orders.create`. `Order.source` = `storefront` | `admin`; `paymentGateway` = `razorpay` | `manual` | `cod`.
