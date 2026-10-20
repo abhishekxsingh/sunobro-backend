@@ -40,6 +40,11 @@ const create = async ({ items, shipping }, customerId, {
       failure = { type: 'field-validation', errors: [{ name: 'sku', message: `Unknown SKU: ${item.sku}` }] };
       break;
     }
+    if (variant.enabled === false && !allowDraft) {
+      const option = `${product.name} in ${variant.color} / ${variant.size}`;
+      failure = { type: 'field-validation', errors: [{ name: 'sku', message: `${option} is no longer available.` }] };
+      break;
+    }
     if (product.status !== 'active' && !allowDraft) {
       failure = { type: 'field-validation', errors: [{ name: 'sku', message: `${product.name} is no longer available.` }] };
       break;

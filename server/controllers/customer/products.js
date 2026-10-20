@@ -4,13 +4,13 @@ const { toProductDTO, toProductWithVariantsDTO } = require('../../utils/serializ
 const list = async (req, res) => {
   try {
     const { query: { page, limit } } = req;
-    const { doc, meta } = await ProductsService.list({ page, limit });
+    const { doc, galleryById, meta } = await ProductsService.list({ page, limit });
 
     res.setHeader('x-coreplatform-total-records', meta.totalRecords);
     res.setHeader('x-coreplatform-page', meta.page);
     res.setHeader('x-coreplatform-limit', meta.limit);
 
-    return res.getRequest(doc.map(toProductDTO));
+    return res.getRequest(doc.map((p) => ({ ...toProductDTO(p), gallery: galleryById.get(p.id) || p.images })));
   } catch (error) {
     return res.serverError(error);
   }

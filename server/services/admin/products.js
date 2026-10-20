@@ -74,28 +74,38 @@ const validateVariants = (rows) => {
   return errors;
 };
 
+const isEnabled = (v) => v.enabled !== false;
+
+// Only switched-on variants need a Qikink Store SKU: a colour that is off
+// can stay unmapped without blocking the product.
 const mappingStats = (variants) => {
-  const mappedCount = variants.filter((v) => Boolean(v.qikinkSku)).length;
+  const enabled = variants.filter(isEnabled);
+  const mappedCount = enabled.filter((v) => Boolean(v.qikinkSku)).length;
   return {
     variantCount: variants.length,
+    enabledCount: enabled.length,
     mappedCount,
-    qikinkSynced: variants.length > 0 && mappedCount === variants.length,
+    qikinkSynced: enabled.length > 0 && mappedCount === enabled.length,
     totalStock: variants.reduce((sum, v) => sum + (v.stock || 0), 0),
   };
 };
 
-// A product can only be live once every variant can actually be fulfilled.
-const resolveStatus = (requested, current, variants) => {
-  const { qikinkSynced, mappedCount, variantCount } = mappingStats(variants);
-  if (requested === 'active' && !qikinkSynced) {
+// New products start in review; an admin publishes them. Active needs every
+// switched-on variant mapped to Qikink and a cover image.
+const resolveStatus = (requested, current, variants, images = []) => {
+  const status = requested || current || 'review';
+  if (status !== 'active') return { status };
+  const { qikinkSynced, mappedCount, enabledCount } = mappingStats(variants);
+  if (!qikinkSynced) {
     return conflict(
       'status',
-      `Map every variant to a Qikink SKU before publishing (${mappedCount}/${variantCount} mapped).`,
+      enabledCount === 0
+        ? 'Switch on at least one colour/size before publishing.'
+        : `Map every available variant to a Qikink Store SKU before publishing (${mappedCount}/${enabledCount} mapped).`,
     );
   }
-  if (requested) return { status: requested };
-  if (current) return { status: current };
-  return { status: qikinkSynced ? 'active' : 'draft' };
+  if (!images.length) return conflict('status', 'Add a cover image before publishing.');
+  return { status };
 };
 
 const skuTakenElsewhere = async (rows, productId) => {
@@ -164,7 +174,7 @@ const create = async (payload) => {
   const invalid = validateVariants(rows);
   if (invalid.length) return { errors: invalid };
 
-  const resolved = resolveStatus(status, null, rows);
+  const resolved = resolveStatus(status, null, rows, productFields.images || []);
   if (resolved.errors) return resolved;
 
   const taken = await skuTakenElsewhere(rows, null);
@@ -239,24 +249,33 @@ const update = async (id, payload) => {
   }
 
   const existingVariants = await ProductVariant.find({ productId: product._id });
-  const existingSkuByKey = new Map(existingVariants.map((v) => [variantKey(v.size, v.color), v.sku]));
+  const existingByKey = new Map(existingVariants.map((v) => [variantKey(v.size, v.color), v]));
 
   let rows = null;
   if (hasVariantInput(payload)) {
     rows = normalizeVariants(product.slug, {
       sizes: productFields.sizes ?? product.sizes, colors, stock, qikinkSku, variants,
-    }).map((row, i) => ({
-      ...row,
-      // Keep an existing variant's SKU unless one was sent explicitly.
-      sku: variants?.[i]?.sku?.trim() || existingSkuByKey.get(variantKey(row.size, row.color)) || row.sku,
-    }));
+    }).map((row, i) => {
+      const current = existingByKey.get(variantKey(row.size, row.color));
+      return {
+        ...row,
+        // Keep an existing variant's SKU unless one was sent explicitly.
+        sku: variants?.[i]?.sku?.trim() || current?.sku || row.sku,
+        enabled: current ? isEnabled(current) : true,
+      };
+    });
     const invalid = validateVariants(rows);
     if (invalid.length) return { errors: invalid };
     const taken = await skuTakenElsewhere(rows, product._id);
     if (taken) return taken;
   }
 
-  const resolved = resolveStatus(status, product.status, rows || existingVariants);
+  const resolved = resolveStatus(
+    status,
+    product.status,
+    rows || existingVariants,
+    productFields.images ?? product.images,
+  );
   if (resolved.errors) return resolved;
 
   const savedVariants = rows ? await syncVariants(product, rows) : existingVariants;
@@ -272,6 +291,37 @@ const update = async (id, payload) => {
   }
 
   return { doc: toDTO(product, savedVariants) };
+};
+
+/**
+ * Switch a whole colour (size omitted) or one colour + size on or off.
+ * Refuses to switch off the last option of a live product — unpublish it
+ * instead, so the storefront never lists something nobody can buy.
+ */
+const setAvailability = async (id, { color, size, enabled }) => {
+  if (invalidId(id)) return { errors: [{ name: 'product', message: 'Product not found.' }] };
+  const product = await Product.findById(id);
+  if (!product) return { errors: [{ name: 'product', message: 'Product not found.' }] };
+
+  const variants = await ProductVariant.find({ productId: product._id });
+  const matches = (v) => v.color.toLowerCase() === String(color).trim().toLowerCase()
+    && (!size || v.size.toLowerCase() === String(size).trim().toLowerCase());
+  const targets = variants.filter(matches);
+  if (!targets.length) {
+    return { errors: [{ name: 'variant', message: `No ${size ? `${color} / ${size}` : color} variant on this product.` }] };
+  }
+
+  if (!enabled && product.status === 'active'
+    && variants.every((v) => matches(v) || !isEnabled(v))) {
+    return conflict('enabled', 'That would leave nothing to buy on a live product — set it to draft instead.');
+  }
+  if (enabled && product.status === 'active' && targets.some((v) => !v.qikinkSku)) {
+    return conflict('enabled', 'Add the Qikink Store SKU for this option before switching it on — the product is live.');
+  }
+
+  await ProductVariant.updateMany({ _id: { $in: targets.map((v) => v._id) } }, { $set: { enabled } });
+  const saved = await ProductVariant.find({ productId: product._id });
+  return { doc: toDTO(product, saved) };
 };
 
 const remove = async (id) => {
@@ -309,6 +359,7 @@ module.exports = {
   update,
   remove,
   bulkCreate,
+  setAvailability,
   generateSlug,
   variantKey,
   validateVariants,

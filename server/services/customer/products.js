@@ -12,7 +12,20 @@ const list = async ({ page = 1, limit = PAGINATION.DEFAULT_LIMIT } = {}) => {
     Product.countDocuments({ status: 'active' }),
   ]);
 
-  return { doc: rows, meta: { totalRecords: count, page: currentPage, limit: cappedLimit } };
+  // Each tile's slideshow: the product's own images, then one image per
+  // switched-on colour.
+  const variants = await ProductVariant.find({
+    productId: { $in: rows.map((p) => p._id) },
+    enabled: { $ne: false },
+    image: { $nin: [null, ''] },
+  }).select('productId image').lean();
+  const galleryById = new Map(rows.map((p) => [p.id, [...(p.images || [])]]));
+  variants.forEach((v) => galleryById.get(String(v.productId))?.push(v.image));
+  galleryById.forEach((images, key) => galleryById.set(key, [...new Set(images)]));
+
+  return {
+    doc: rows, galleryById, meta: { totalRecords: count, page: currentPage, limit: cappedLimit },
+  };
 };
 
 const get = async (idOrSlug) => {
@@ -26,7 +39,7 @@ const get = async (idOrSlug) => {
     return { errors: [{ name: 'product', message: 'Product not found.' }] };
   }
 
-  const variants = await ProductVariant.find({ productId: product._id });
+  const variants = await ProductVariant.find({ productId: product._id, enabled: { $ne: false } });
 
   return { doc: product, variants };
 };

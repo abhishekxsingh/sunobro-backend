@@ -18,6 +18,7 @@ describe('Products', () => {
       currency: 'INR',
       images: ['/test.jpg'],
       sizes: ['M', 'L'],
+      status: 'active',
     });
   });
 

@@ -11,6 +11,9 @@ const productVariantSchema = new Schema({
   // Mockup for this variant's colour; shown on the product page when the
   // colour is picked. Empty means the product's cover image.
   image: { type: String },
+  // Switched off by an admin (whole colour or one size): hidden from the
+  // storefront and not orderable. Survives sheet re-imports.
+  enabled: { type: Boolean, default: true },
 }, { timestamps: true });
 
 module.exports = model('ProductVariant', productVariantSchema);

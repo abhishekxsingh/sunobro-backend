@@ -26,7 +26,7 @@ describe('Catalog ↔ Qikink mapping', () => {
     const slug = `cat-test-${Math.random().toString(36).slice(2, 8)}`;
     slugs.push(slug);
     return AdminProductsService.create({
-      name: 'Catalog Tee', slug, price: 499, ...payload,
+      name: 'Catalog Tee', slug, price: 499, images: ['https://img.test/cover.jpg'], ...payload,
     });
   };
 
@@ -47,8 +47,11 @@ describe('Catalog ↔ Qikink mapping', () => {
     expect(unmapped.type).to.equal('conflict');
     expect(unmapped.errors[0].message).to.match(/0\/1 mapped/);
 
-    const autoDraft = await create({ variants: [{ size: 'M', color: 'Black' }] });
-    expect(autoDraft.doc.status).to.equal('draft');
+    const newOne = await create({ variants: [{ size: 'M', color: 'Black' }] });
+    expect(newOne.doc.status).to.equal('review');
+
+    const noCover = await create({ variants, status: 'active', images: [] });
+    expect(noCover.errors[0].message).to.match(/cover image/);
   });
 
   it('rejects two colours sharing one Qikink SKU', async () => {
@@ -64,7 +67,7 @@ describe('Catalog ↔ Qikink mapping', () => {
   it('never generates a colour-blind Qikink SKU for multi-colour products', async () => {
     const { doc } = await create({ sizes: ['M'], colors: ['Black', 'White'], qikinkSku: 'BASE' });
     expect(doc.variants.every((v) => v.qikinkSku === null)).to.equal(true);
-    expect(doc.status).to.equal('draft');
+    expect(doc.status).to.equal('review');
   });
 
   it('keeps variant SKUs and stock when a product is edited', async () => {
