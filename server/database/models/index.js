@@ -8,6 +8,7 @@ const Product = require('./product');
 const ProductVariant = require('./product-variant');
 const Order = require('./order');
 const Subscriber = require('./subscriber');
+const Coupon = require('./coupon');
 
 module.exports = {
   connect,
@@ -17,4 +18,5 @@ module.exports = {
   ProductVariant,
   Order,
   Subscriber,
+  Coupon,
 };

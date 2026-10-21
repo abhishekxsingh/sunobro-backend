@@ -230,6 +230,15 @@ const sendOrderConfirmation = async ({ to, order }) => {
         <td style="padding:0 0 8px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;${ink('#b7becf')};text-align:right;">Subtotal</td>
       </tr>
       ${itemRows}
+      ${order.discount > 0 ? `
+      <tr>
+        <td colspan="2" style="padding-top:12px;font-size:13px;color:#9aa0b5;">
+          Coupon ${esc(order.couponCode || '')}
+        </td>
+        <td style="padding-top:12px;text-align:right;font-size:13px;color:#7ee2b8;">
+          −${esc(money(order.discount, order.currency))}
+        </td>
+      </tr>` : ''}
       <tr>
         <td colspan="2" style="padding-top:16px;font-size:16px;font-weight:700;${ink('#ffffff')}">Total</td>
         <td style="padding-top:16px;text-align:right;font-size:16px;font-weight:700;${ink('#c9d2ff')}">

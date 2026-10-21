@@ -3,6 +3,9 @@ const adminProductsCreate = require('./admin/products/create');
 const adminProductsUpdate = require('./admin/products/update');
 const adminOrdersUpdateStatus = require('./admin/orders/updateStatus');
 const adminOrdersCreate = require('./admin/orders/create');
+const adminCoupons = require('./admin/coupons/save');
+const adminMembers = require('./admin/members/save');
+const customerCouponsValidate = require('./customer/coupons/validate');
 const customerAuthRegister = require('./customer/auth/register');
 const customerAuthLogin = require('./customer/auth/login');
 const customerAuthFirebase = require('./customer/auth/firebase');
@@ -18,6 +21,8 @@ module.exports = {
     auth: { login: adminAuthLogin },
     products: { create: adminProductsCreate, update: adminProductsUpdate },
     orders: { updateStatus: adminOrdersUpdateStatus, create: adminOrdersCreate },
+    coupons: adminCoupons,
+    members: adminMembers,
   },
   customer: {
     auth: {
@@ -26,6 +31,7 @@ module.exports = {
       firebase: customerAuthFirebase,
     },
     orders: { save: customerOrdersSave },
+    coupons: { validate: customerCouponsValidate },
     payments: { create: customerPaymentsCreate, verify: customerPaymentsVerify },
     notify: { subscribe: customerNotifySubscribe },
     profile: { update: customerProfileUpdate },

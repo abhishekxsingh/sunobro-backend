@@ -34,6 +34,7 @@ module.exports = {
     },
     paymentMethod: { type: 'string', enum: ['prepaid', 'cod'] },
     note: { type: 'string' },
+    couponCode: { type: 'string', maxLength: 30 },
     pushToQikink: { type: 'boolean' },
   },
   required: ['items', 'shipping', 'paymentMethod'],

@@ -114,6 +114,39 @@ const setAvailability = async (req, res) => {
   }
 };
 
+const sendResult = (res, { doc, errors, type }) => {
+  if (type === 'conflict') return res.conflict('conflict', errors);
+  if (errors?.[0]?.name === 'product') return res.notFound();
+  if (errors) return res.badRequest('field-validation', errors);
+  return res.getRequest(doc);
+};
+
+// Body: { color, image?, sizes: [{ size, qikinkSku?, price? }] }
+const addVariants = async (req, res) => {
+  try {
+    const { color, image, sizes } = req.body || {};
+    if (typeof color !== 'string' || !Array.isArray(sizes) || (image !== undefined && typeof image !== 'string')) {
+      return res.badRequest('field-validation', [{ name: 'body', message: 'Send { color, image?, sizes: [{ size, qikinkSku }] }.' }]);
+    }
+    return sendResult(res, await AdminProductsService.addVariants(req.params.id, { color, image, sizes }));
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
+// Body: { color, image } — image '' clears it.
+const setColourImage = async (req, res) => {
+  try {
+    const { color, image } = req.body || {};
+    if (typeof color !== 'string' || typeof image !== 'string') {
+      return res.badRequest('field-validation', [{ name: 'body', message: 'Send { color, image }.' }]);
+    }
+    return sendResult(res, await AdminProductsService.setColourImage(req.params.id, { color, image }));
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
 const syncQikink = async (req, res) => {
   try {
     const result = await QikinkService.syncProduct(req.params.id);
@@ -124,5 +157,14 @@ const syncQikink = async (req, res) => {
 };
 
 module.exports = {
-  list, get, create, update, remove, bulkCreate, syncQikink, setAvailability,
+  list,
+  get,
+  create,
+  update,
+  remove,
+  bulkCreate,
+  syncQikink,
+  setAvailability,
+  addVariants,
+  setColourImage,
 };
