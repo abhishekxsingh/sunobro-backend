@@ -139,6 +139,11 @@ const countryCodeOf = (country) => {
 };
 
 const buildOrderPayload = async (order) => {
+  // Line prices carry the coupon discount pro rata so they add up to the
+  // order value Qikink invoices (and collects, for COD).
+  const priceFactor = order.discount > 0 && order.subtotal > 0
+    ? (order.subtotal - order.discount) / order.subtotal
+    : 1;
   const lineItems = [];
   const missingSkus = [];
   for (let i = 0; i < (order.items || []).length; i += 1) {
@@ -156,7 +161,7 @@ const buildOrderPayload = async (order) => {
         search_from_my_products: 1,
         sku: String(qikinkSku).slice(0, 50),
         quantity: String(item.qty),
-        price: String(Math.round(item.price)),
+        price: String(Math.round(item.price * priceFactor)),
       });
     }
   }
@@ -483,6 +488,7 @@ module.exports = {
   syncProduct,
   syncAll,
   fulfillOrder,
+  buildOrderPayload,
   isPushable,
   listOrders,
   syncOrder,

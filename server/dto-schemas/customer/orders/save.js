@@ -36,6 +36,7 @@ module.exports = {
   properties: {
     items: { type: 'array', items: orderLineItem, minItems: 1 },
     shipping: shippingAddress,
+    couponCode: { type: 'string', maxLength: 30 },
   },
   required: ['items', 'shipping'],
   errorMessage: {

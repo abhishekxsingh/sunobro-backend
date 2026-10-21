@@ -26,6 +26,14 @@ const orderSchema = new Schema({
     default: 'pending',
   },
   subtotal: { type: Number, required: true },
+  // Coupon applied at checkout; `discount` is already taken off `total`.
+  // couponCounted flips once the order is paid (or COD) so a redemption is
+  // counted exactly once, and back if the order is cancelled.
+  couponId: { type: Schema.Types.ObjectId, ref: 'Coupon' },
+  couponCode: { type: String },
+  couponHolder: { type: String },
+  couponCounted: { type: Boolean, default: false },
+  discount: { type: Number, default: 0 },
   shippingFee: { type: Number, default: 0 },
   tax: { type: Number, default: 0 },
   total: { type: Number, required: true },
@@ -62,5 +70,6 @@ const orderSchema = new Schema({
 }, { timestamps: true });
 
 orderSchema.index({ status: 1, qikinkStatus: 1 });
+orderSchema.index({ couponId: 1, couponHolder: 1, couponCounted: 1 });
 
 module.exports = model('Order', orderSchema);

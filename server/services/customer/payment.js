@@ -5,6 +5,7 @@ const { Order } = require('../../database/models');
 const { RAZORPAY } = require('../../config');
 const QikinkService = require('../admin/qikink');
 const emailService = require('../email');
+const CouponService = require('../coupons');
 const logger = require('../../utils/logger');
 
 const getClient = () => {
@@ -50,6 +51,8 @@ const markPaidAndFulfill = async (order, paymentId) => {
     return current;
   }
 
+  await CouponService.redeem(paid._id);
+
   let result = paid;
   try {
     const { order: fulfilled } = await QikinkService.fulfillOrder(paid._id);
@@ -88,6 +91,18 @@ const createOrder = async ({ orderId }) => {
     return {
       type: 'conflict',
       errors: [{ name: 'status', message: `Order is already ${order.status}.` }],
+    };
+  }
+
+  // The coupon may have expired or run out since the order was placed.
+  const coupon = await CouponService.recheckOrder(order);
+  if (coupon.errors) {
+    return {
+      type: 'conflict',
+      errors: [{
+        name: 'couponCode',
+        message: `${coupon.errors[0].message} Remove the coupon and try again.`,
+      }],
     };
   }
 
