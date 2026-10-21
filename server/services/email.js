@@ -5,6 +5,10 @@ const logger = require('../utils/logger');
 const FROM = process.env.FROM_EMAIL || 'SunoBro <orders@sunobro.com>';
 const SITE = 'https://www.sunobro.com';
 const LOGO = `${SITE}/brand/logo-mark-192.png`;
+const SOCIAL = [
+  { label: 'Instagram', href: 'https://www.instagram.com/officialsunobro/' },
+  { label: 'Facebook', href: 'https://www.facebook.com/profile.php?id=61553027412800' },
+];
 
 let resendClient = null;
 const getResend = () => {
@@ -139,6 +143,18 @@ const frame = ({
                 240+ GSM · Print on demand · Ships across India<br>
                 <a href="${SITE}" style="${ink('#c9d2ff')};text-decoration:none;">www.sunobro.com</a>
               </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;">
+                <tr>
+                  ${SOCIAL.map((link) => `
+                  <td bgcolor="#12151c" style="padding:10px 14px;${fill('#12151c')}border:1px solid #2c3140;">
+                    <a href="${esc(link.href)}" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;
+                      font-weight:700;letter-spacing:0.12em;text-transform:uppercase;${ink('#c9d2ff')};text-decoration:none;">
+                      ${esc(link.label)}
+                    </a>
+                  </td>
+                  <td style="width:8px;font-size:0;line-height:0;">&nbsp;</td>`).join('')}
+                </tr>
+              </table>
             </td>
           </tr>
         </table>
