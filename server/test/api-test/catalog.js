@@ -16,8 +16,8 @@ const SHIPPING = {
 };
 
 const variants = [
-  { size: 'M', color: 'Black', qikinkSku: 'MVnHs-Bk-M' },
-  { size: 'M', color: 'White', qikinkSku: 'MVnHs-Wh-M' },
+  { size: 'M', color: 'Black', qikinkSku: 'v-cat-bk-m' },
+  { size: 'M', color: 'White', qikinkSku: 'v-cat-wh-m' },
 ];
 
 describe('Catalog ↔ Qikink mapping', () => {
@@ -57,11 +57,22 @@ describe('Catalog ↔ Qikink mapping', () => {
   it('rejects two colours sharing one Qikink SKU', async () => {
     const result = await create({
       variants: [
-        { size: 'M', color: 'Black', qikinkSku: 'SAME' },
-        { size: 'M', color: 'White', qikinkSku: 'SAME' },
+        { size: 'M', color: 'Black', qikinkSku: 'v-same' },
+        { size: 'M', color: 'White', qikinkSku: 'v-same' },
       ],
     });
     expect(result.errors[0].name).to.equal('qikinkSku');
+  });
+
+  it('rejects Product SKUs and sizes/colours left blank, and needs a price to publish', async () => {
+    const wrong = await create({ variants: [{ size: 'S', color: 'Black', qikinkSku: 'MRnHs-Bk-S' }] });
+    expect(wrong.errors[0].message).to.match(/"MRnHs-Bk-S" \(Black \/ S\) is not a Qikink Store SKU/);
+
+    const blank = await create({ variants: [{ size: ' ', color: 'Black', qikinkSku: 'v-blank' }] });
+    expect(blank.errors[0].message).to.match(/size and a colour/);
+
+    const free = await create({ variants, status: 'active', price: 0 });
+    expect(free.errors[0].message).to.match(/Set a price/);
   });
 
   it('never generates a colour-blind Qikink SKU for multi-colour products', async () => {
@@ -77,15 +88,15 @@ describe('Catalog ↔ Qikink mapping', () => {
     const { doc: edited } = await AdminProductsService.update(doc.id, {
       name: 'Renamed Tee',
       variants: [
-        { size: 'M', color: 'Black', qikinkSku: 'MVnHs-Bk-M2' },
-        { size: 'L', color: 'Black', qikinkSku: 'MVnHs-Bk-L' },
+        { size: 'M', color: 'Black', qikinkSku: 'v-cat-bk-m2' },
+        { size: 'L', color: 'Black', qikinkSku: 'v-cat-bk-l' },
       ],
     });
 
     const after = edited.variants.find((v) => v.color === 'Black' && v.size === 'M');
     expect(after.sku).to.equal(before.sku);
     expect(after.stock).to.equal(7);
-    expect(after.qikinkSku).to.equal('MVnHs-Bk-M2');
+    expect(after.qikinkSku).to.equal('v-cat-bk-m2');
     expect(edited.variants).to.have.length(2);
     expect(edited.name).to.equal('Renamed Tee');
   });
@@ -155,7 +166,7 @@ describe('Catalog ↔ Qikink mapping', () => {
       expect(result.doc.paymentGateway).to.equal('cod');
       expect(result.doc.qikinkOrderId).to.equal('901');
       expect(created[0].gateway).to.equal('COD');
-      expect(created[0].line_items[0]).to.include({ sku: 'MVnHs-Wh-M', quantity: '2' });
+      expect(created[0].line_items[0]).to.include({ sku: 'v-cat-wh-m', quantity: '2' });
     });
 
     it('can create without pushing, for a later manual push', async () => {

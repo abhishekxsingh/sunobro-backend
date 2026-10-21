@@ -77,9 +77,34 @@ const productsData = [
   },
 ];
 
+const Order = require('../models/order');
+const Customer = require('../models/customer');
+
+// This script DELETES every admin, product and variant before inserting demo
+// data. It is for an empty local/dev database only. It never runs on deploy
+// or server start — and it refuses to touch a database that already has data
+// unless you name that exact database:
+//   SEED_CONFIRM_DB=<database name> npm run db:seed
 async function seed() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to seed with NODE_ENV=production.');
+  }
   await mongoose.connect(MONGODB_URI);
-  console.log('Connected to MongoDB');
+  const dbName = mongoose.connection.db.databaseName;
+  console.log(`Connected to MongoDB — database "${dbName}"`);
+
+  const [adminCount, productCount, orderCount, customerCount] = await Promise.all([
+    Admin.countDocuments(), Product.countDocuments(), Order.countDocuments(), Customer.countDocuments(),
+  ]);
+  const hasData = adminCount + productCount + orderCount + customerCount > 0;
+  if (hasData && process.env.SEED_CONFIRM_DB !== dbName) {
+    await mongoose.disconnect();
+    throw new Error(
+      `"${dbName}" already has data (${adminCount} admins, ${productCount} products, `
+      + `${orderCount} orders, ${customerCount} customers). Seeding would delete admins and products. Nothing was changed. `
+      + `If this really is a throwaway database, re-run with SEED_CONFIRM_DB=${dbName}.`,
+    );
+  }
 
   await Promise.all([
     Admin.deleteMany({}),
@@ -131,6 +156,6 @@ async function seed() {
 }
 
 seed().catch((err) => {
-  console.error(err);
+  console.error(err.message || err);
   process.exit(1);
 });

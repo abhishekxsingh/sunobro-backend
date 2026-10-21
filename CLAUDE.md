@@ -94,6 +94,18 @@ Register static paths (`/orders/me`, `/admin/products/bulk`) **before** `/:id` r
 - `GET/POST /admin/members`, `PUT /admin/members/:id` (name / role / active), `POST /admin/members/:id/reset-password`, `DELETE /admin/members/:id` (`services/admin/members.js`). Adding without a password generates a one-time password (`xxxx-xxxx-xxxx-xxxx`) returned once — share it; the member changes it in Profile. Guards: can't deactivate/demote/remove/reset yourself; the team always keeps ≥1 active admin. Emails are stored lower-case; login is case-insensitive.
 - CLI fallback still exists: `npm run admin:create`.
 
+## Required for selling (enforced)
+
+- Saving a product rejects any `qikinkSku` that isn't a Store SKU (`v-…`) and any variant without a size or colour. Publishing (`active`) needs: a price > 0, a cover image, at least one switched-on variant, and a Store SKU on every switched-on variant. Order creation then resolves each line to its variant's Store SKU, which is all Qikink needs (`search_from_my_products: 1`).
+
+## Data safety — deploys never wipe data
+
+- **Deploys don't touch data.** The backend workflow zips `server/` and uploads it; Azure restarts `node server.js`. Nothing seeds, migrates or deletes on deploy or start. Data lives in MongoDB Atlas, separate from the app, and survives every deploy. Admin/storefront deploys don't touch the database at all.
+- **Schema changes are additive only** (new optional fields with defaults, new collections). Never ship code that drops/renames fields or collections without an explicit, reviewed migration.
+- `npm run db:seed` **deletes all admins, products and variants** — for an empty dev DB only. It refuses `NODE_ENV=production` and any database that already has admins/products/orders/customers unless `SEED_CONFIRM_DB=<that db name>` is set. `.env` points at PRODUCTION (`test` db): never set `SEED_CONFIRM_DB=test`.
+- Tests run only against `sunobro_test` (guard in `test/setup.js`); e2e uses `sunobro_e2e`. Print `mongoose.connection.db.databaseName` before any script writes.
+- Deleting a product removes only that product's variants; orders keep their own copy of line items.
+
 ## Auth pattern
 
 httpOnly cookies only (no Bearer tokens). JWT payload includes `type: 'admin' | 'customer'` (TOKEN_TYPE); middleware rejects a token of the wrong type. Cookie names configurable via `ADMIN_SESSION_COOKIE` / `CUSTOMER_SESSION_COOKIE`.
