@@ -27,19 +27,15 @@ const hasVariantInput = (payload) => Array.isArray(payload.variants)
  * Each variant (size × colour) maps to exactly one Qikink "My Products" SKU —
  * that SKU is what tells Qikink which garment, colour, size and design to print.
  * Explicit `variants` are the normal path; sizes × colours is a convenience that
- * leaves Qikink SKUs empty unless there is a single colour (legacy BASE-SIZE).
+ * leaves Qikink SKUs empty — every size × colour has its own Qikink Store SKU,
+ * which can't be derived from a base code.
  */
 const normalizeVariants = (slug, payload) => {
   let rows = payload.variants;
   if (!Array.isArray(rows) || rows.length === 0) {
     const sizes = payload.sizes?.length ? payload.sizes : ['M'];
     const colors = payload.colors?.length ? payload.colors : ['Black'];
-    const base = colors.length === 1 && payload.qikinkSku ? payload.qikinkSku.trim() : '';
-    rows = sizes.flatMap((size) => colors.map((color) => ({
-      size,
-      color,
-      qikinkSku: base ? `${base}-${slugifyPart(size)}` : undefined,
-    })));
+    rows = sizes.flatMap((size) => colors.map((color) => ({ size, color })));
   }
 
   return rows.map((v) => ({
@@ -68,6 +64,15 @@ const validateVariants = (rows) => {
   };
 
   if (rows.length === 0) errors.push({ name: 'variants', message: 'Add at least one size/colour variant.' });
+  if (rows.some((r) => !String(r.size || '').trim() || !String(r.color || '').trim())) {
+    errors.push({ name: 'variants', message: 'Every variant needs a size and a colour.' });
+  }
+  // Orders send this code to Qikink: only Store SKUs (v-…) are accepted there.
+  // The Product SKU (MRnHs-Bk-S) is rejected as "Invalid SKU".
+  rows.filter((r) => r.qikinkSku && !String(r.qikinkSku).startsWith('v-')).forEach((r) => errors.push({
+    name: 'qikinkSku',
+    message: `"${r.qikinkSku}" (${r.color} / ${r.size}) is not a Qikink Store SKU — use the code starting with v-.`,
+  }));
   flagDuplicates('variants', (r) => variantKey(r.size, r.color), (k) => `Duplicate variant ${k.replace('|', ' / ')}.`);
   flagDuplicates('sku', (r) => r.sku, (k) => `Duplicate SKU ${k}.`);
   // Two variants on one Qikink SKU means one of them prints the wrong item.
@@ -93,7 +98,7 @@ const mappingStats = (variants) => {
 
 // New products start in review; an admin publishes them. Active needs every
 // switched-on variant mapped to Qikink and a cover image.
-const resolveStatus = (requested, current, variants, images = []) => {
+const resolveStatus = (requested, current, variants, images = [], price = 1) => {
   const status = requested || current || 'review';
   if (status !== 'active') return { status };
   const { qikinkSynced, mappedCount, enabledCount } = mappingStats(variants);
@@ -106,6 +111,7 @@ const resolveStatus = (requested, current, variants, images = []) => {
     );
   }
   if (!images.length) return conflict('status', 'Add a cover image before publishing.');
+  if (!(Number(price) > 0)) return conflict('status', 'Set a price before publishing.');
   return { status };
 };
 
@@ -175,7 +181,7 @@ const create = async (payload) => {
   const invalid = validateVariants(rows);
   if (invalid.length) return { errors: invalid };
 
-  const resolved = resolveStatus(status, null, rows, productFields.images || []);
+  const resolved = resolveStatus(status, null, rows, productFields.images || [], productFields.price);
   if (resolved.errors) return resolved;
 
   const taken = await skuTakenElsewhere(rows, null);
@@ -280,6 +286,7 @@ const update = async (id, payload) => {
     product.status,
     rows || existingVariants,
     productFields.images ?? product.images,
+    productFields.price ?? product.price,
   );
   if (resolved.errors) return resolved;
 
