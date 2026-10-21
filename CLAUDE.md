@@ -87,6 +87,13 @@ Register static paths (`/orders/me`, `/admin/products/bulk`) **before** `/:id` r
 - Qikink line prices are scaled by `(subtotal − discount) / subtotal` so they add up to `total_order_value`. The confirmation email shows the coupon line.
 - Endpoints: storefront `GET /coupons/available` (public offers + coupons issued to the logged-in customer), `POST /coupons/validate` `{ code, items, email? }` (preview; per-customer checks skipped until there's an email). Admin `GET/POST /admin/coupons`, `PUT/DELETE /admin/coupons/:id` (delete refused once on an order — switch off instead), `GET /admin/coupons/:id/redemptions`, `GET /admin/customers/search?q=`. Admin orders accept `couponCode`.
 
+## Team members (admin accounts)
+
+- `Admin`: `role` admin | ops, `active`, `lastLoginAt`, `createdBy`. **admin** = everything incl. the team; **ops** = everything except team management.
+- `requireAdmin` looks the account up on every request (role from the DB, inactive/removed → 401), so deactivating/removing a member or changing a role takes effect on their open session immediately. `requireRole('admin')` guards team routes (403 otherwise).
+- `GET/POST /admin/members`, `PUT /admin/members/:id` (name / role / active), `POST /admin/members/:id/reset-password`, `DELETE /admin/members/:id` (`services/admin/members.js`). Adding without a password generates a one-time password (`xxxx-xxxx-xxxx-xxxx`) returned once — share it; the member changes it in Profile. Guards: can't deactivate/demote/remove/reset yourself; the team always keeps ≥1 active admin. Emails are stored lower-case; login is case-insensitive.
+- CLI fallback still exists: `npm run admin:create`.
+
 ## Auth pattern
 
 httpOnly cookies only (no Bearer tokens). JWT payload includes `type: 'admin' | 'customer'` (TOKEN_TYPE); middleware rejects a token of the wrong type. Cookie names configurable via `ADMIN_SESSION_COOKIE` / `CUSTOMER_SESSION_COOKIE`.

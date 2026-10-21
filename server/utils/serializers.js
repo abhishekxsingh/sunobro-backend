@@ -3,6 +3,9 @@ const toAdminDTO = (admin) => ({
   name: admin.name,
   email: admin.email,
   role: admin.role,
+  active: admin.active !== false,
+  lastLoginAt: admin.lastLoginAt || null,
+  createdAt: admin.createdAt || null,
 });
 
 const toAddressDTO = (address) => ({
