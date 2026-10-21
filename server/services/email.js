@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
@@ -6,8 +8,18 @@ const FROM = process.env.FROM_EMAIL || 'SunoBro <orders@sunobro.com>';
 const SITE = 'https://www.sunobro.com';
 const LOGO = `${SITE}/brand/logo-mark-192.png`;
 const SOCIAL = [
-  { label: 'Instagram', href: 'https://www.instagram.com/officialsunobro/' },
-  { label: 'Facebook', href: 'https://www.facebook.com/profile.php?id=61553027412800' },
+  {
+    label: 'Instagram',
+    href: 'https://www.instagram.com/officialsunobro/',
+    cid: 'social-instagram',
+    file: path.join(__dirname, '../assets/email/instagram.png'),
+  },
+  {
+    label: 'Facebook',
+    href: 'https://www.facebook.com/profile.php?id=61553027412800',
+    cid: 'social-facebook',
+    file: path.join(__dirname, '../assets/email/facebook.png'),
+  },
 ];
 
 let resendClient = null;
@@ -35,12 +47,19 @@ const getSmtp = () => {
 
 const mailConfigured = () => Boolean(getSmtp() || process.env.RESEND_API_KEY);
 
+const socialAttachments = () => SOCIAL.map((link) => ({
+  filename: path.basename(link.file),
+  path: link.file,
+  cid: link.cid,
+}));
+
 const deliver = async ({ to, subject, html, text }) => {
   const smtp = getSmtp();
   if (smtp) {
     const from = process.env.SMTP_FROM || `SunoBro <${process.env.SMTP_USER}>`;
     await smtp.sendMail({
       from, to, subject, html, text,
+      attachments: socialAttachments(),
     });
     return;
   }
@@ -48,7 +67,16 @@ const deliver = async ({ to, subject, html, text }) => {
   const resend = getResend();
   if (!resend) return;
   const result = await resend.emails.send({
-    from: FROM, to, subject, html,
+    from: FROM,
+    to,
+    subject,
+    html,
+    attachments: SOCIAL.map((link) => ({
+      filename: path.basename(link.file),
+      content: fs.readFileSync(link.file).toString('base64'),
+      content_type: 'image/png',
+      content_id: link.cid,
+    })),
   });
   if (result && result.error) {
     const error = new Error(result.error.message || 'Email was rejected');
@@ -146,10 +174,20 @@ const frame = ({
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;">
                 <tr>
                   ${SOCIAL.map((link) => `
-                  <td bgcolor="#12151c" style="padding:10px 14px;${fill('#12151c')}border:1px solid #2c3140;">
-                    <a href="${esc(link.href)}" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;
-                      font-weight:700;letter-spacing:0.12em;text-transform:uppercase;${ink('#c9d2ff')};text-decoration:none;">
-                      ${esc(link.label)}
+                  <td bgcolor="#12151c" style="padding:8px 14px;${fill('#12151c')}border:1px solid #2c3140;">
+                    <a href="${esc(link.href)}" style="text-decoration:none;">
+                      <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td bgcolor="#12151c" style="vertical-align:middle;padding-right:8px;${fill('#12151c')}">
+                            <img src="cid:${link.cid}" width="18" height="18" alt=""
+                              style="display:block;width:18px;height:18px;border:0;outline:none;" />
+                          </td>
+                          <td bgcolor="#12151c" style="vertical-align:middle;${fill('#12151c')}font-family:Arial,Helvetica,sans-serif;
+                            font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;${ink('#c9d2ff')}">
+                            ${esc(link.label)}
+                          </td>
+                        </tr>
+                      </table>
                     </a>
                   </td>
                   <td style="width:8px;font-size:0;line-height:0;">&nbsp;</td>`).join('')}
