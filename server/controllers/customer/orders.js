@@ -2,6 +2,7 @@ const OrdersService = require('../../services/customer/orders');
 const Schemas = require('../../dto-schemas');
 const Validator = require('../../utils/validator');
 const { toOrderDTO } = require('../../utils/serializers');
+const { Customer } = require('../../database/models');
 
 const create = async (req, res) => {
   try {
@@ -15,7 +16,13 @@ const create = async (req, res) => {
       return res.badRequest('field-validation', validationErrors);
     }
 
-    const { doc, errors, type } = await OrdersService.create(body, customer?.sub);
+    // Orders belong to the signed-in account and use its email for receipts
+    // and tracking updates.
+    const account = await Customer.findById(customer.sub).select('email').lean();
+    if (!account) return res.unAuthorized();
+    const order = { ...body, shipping: { ...body.shipping, email: account.email } };
+
+    const { doc, errors, type } = await OrdersService.create(order, customer.sub);
 
     if (!doc) {
       if (type === 'conflict') {

@@ -19,6 +19,8 @@ const customerSchema = new Schema({
   phone: { type: String },
   passwordHash: { type: String },
   firebaseUid: { type: String, unique: true, sparse: true },
+  // Google profile photo (set on Google sign-in).
+  avatarUrl: { type: String, default: null },
   addresses: { type: [addressSchema], default: [] },
 }, { timestamps: true });
 

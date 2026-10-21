@@ -32,6 +32,7 @@ const toCustomerDTO = (customer) => {
     name: customer.name,
     email: customer.email,
     phone: customer.phone || '',
+    avatarUrl: customer.avatarUrl || null,
     authMethod,
     addresses: (customer.addresses || []).map(toAddressDTO),
   };
