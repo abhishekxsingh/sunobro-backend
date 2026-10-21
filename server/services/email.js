@@ -68,7 +68,7 @@ const esc = (value) => String(value ?? '')
 const button = (href, label) => `
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 4px">
   <tr>
-    <td style="background:#c9d2ff;">
+    <td bgcolor="#c9d2ff" style="background-color:#c9d2ff;">
       <a href="${esc(href)}"
         style="display:inline-block;padding:14px 22px;font-family:Arial,Helvetica,sans-serif;
         font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;
@@ -82,26 +82,37 @@ const button = (href, label) => `
 const frame = ({
   preheader, eyebrow, title, intro, bodyHtml, ctaHref, ctaLabel,
 }) => `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="supported-color-schemes" content="dark">
   <title>${esc(title)}</title>
+  <style>
+    :root { color-scheme: dark; supported-color-schemes: dark; }
+    body, .body, .page { background-color:#101218 !important; color:#eceef6 !important; }
+    .card { background-color:#171a22 !important; }
+    u + .body .g-screen { background:#000; mix-blend-mode:screen; }
+    u + .body .g-diff { background:#000; mix-blend-mode:difference; }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:#101218;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+<body class="body" bgcolor="#101218" style="margin:0;padding:0;background-color:#101218;color:#eceef6;">
+  <div class="g-screen">
+  <div class="g-diff">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#101218;">
     ${esc(preheader)}
   </div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#101218;">
+  <table class="page" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#101218" style="background-color:#101218;">
     <tr>
-      <td align="center" style="padding:28px 12px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-          style="max-width:560px;background:#171a22;border:1px solid #2c3140;">
+      <td align="center" bgcolor="#101218" style="padding:28px 12px;background-color:#101218;">
+        <table class="card" role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#171a22"
+          style="max-width:560px;background-color:#171a22;border:1px solid #2c3140;">
           <tr>
-            <td style="height:4px;background:#c9d2ff;font-size:0;line-height:0;">&nbsp;</td>
+            <td bgcolor="#c9d2ff" style="height:4px;background-color:#c9d2ff;font-size:0;line-height:0;">&nbsp;</td>
           </tr>
           <tr>
-            <td style="padding:32px 28px 28px;font-family:Arial,Helvetica,sans-serif;color:#eceef6;">
+            <td bgcolor="#171a22" style="padding:32px 28px 28px;background-color:#171a22;font-family:Arial,Helvetica,sans-serif;color:#eceef6;">
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
                 <tr>
                   <td style="padding-right:12px;vertical-align:middle;">
@@ -136,6 +147,8 @@ const frame = ({
       </td>
     </tr>
   </table>
+  </div>
+  </div>
 </body>
 </html>`;
 
@@ -226,10 +239,10 @@ const sendWelcome = async ({ to, name }) => {
 const noticeRow = (label, detail) => `
 <tr>
   <td style="padding:0 0 10px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-      style="background:#12151c;border:1px solid #2c3140;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#12151c"
+      style="background-color:#12151c;border:1px solid #2c3140;">
       <tr>
-        <td style="width:4px;background:#c9d2ff;font-size:0;line-height:0;">&nbsp;</td>
+        <td bgcolor="#c9d2ff" style="width:4px;background-color:#c9d2ff;font-size:0;line-height:0;">&nbsp;</td>
         <td style="padding:12px 14px;font-family:Arial,Helvetica,sans-serif;">
           <p style="margin:0 0 3px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#c9d2ff;">
             ${esc(label)}
@@ -256,7 +269,7 @@ const sendDropNotice = async ({ to }) => {
     bodyHtml: `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;">
         <tr>
-          <td style="padding:14px 16px;background:#12151c;border:1px solid #2c3140;font-family:Arial,Helvetica,sans-serif;">
+          <td bgcolor="#12151c" style="padding:14px 16px;background-color:#12151c;border:1px solid #2c3140;font-family:Arial,Helvetica,sans-serif;">
             <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9aa0b5;">
               Confirmation sent to
             </p>
