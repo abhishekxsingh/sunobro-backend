@@ -119,7 +119,7 @@ describe('Coupons', function coupons() {
 
     const abandoned = await order('ONCE');
     const second = await order('ONCE'); // an unpaid order doesn't use the coupon up
-    expect(second.doc).to.exist;
+    expect(second.doc).to.be.an('object');
     expect((await Coupon.findById(c.id)).usedCount).to.equal(0);
 
     await pay(second.doc);
@@ -128,7 +128,7 @@ describe('Coupons', function coupons() {
     expect((await Coupon.findById(c.id)).usedCount).to.equal(1);
 
     expect((await order('ONCE', { email: 'GUEST@test.io' })).errors[0].message).to.match(/already used/);
-    expect((await order('ONCE', { email: 'other@test.io' })).doc).to.exist;
+    expect((await order('ONCE', { email: 'other@test.io' })).doc).to.be.an('object');
 
     // The abandoned order can no longer be paid with the coupon.
     const recheck = await PaymentService.createOrder({ orderId: abandoned.doc.id });
@@ -137,7 +137,7 @@ describe('Coupons', function coupons() {
 
     await AdminOrdersService.updateStatus(second.doc.id, { status: 'cancelled' });
     expect((await Coupon.findById(c.id)).usedCount).to.equal(0);
-    expect((await order('ONCE')).doc).to.exist;
+    expect((await order('ONCE')).doc).to.be.an('object');
   });
 
   it('stops at the total usage limit', async () => {
@@ -163,7 +163,7 @@ describe('Coupons', function coupons() {
     await coupon({ code: 'WELCOME', firstOrderOnly: true, perCustomerLimit: null });
     await pay((await order(null, { email: 'old@test.io' })).doc);
     expect((await order('WELCOME', { email: 'Old@Test.io' })).errors[0].message).to.match(/first order/);
-    expect((await order('WELCOME', { email: 'new@test.io' })).doc).to.exist;
+    expect((await order('WELCOME', { email: 'new@test.io' })).doc).to.be.an('object');
   });
 
   it('lists checkout offers plus coupons issued to the logged-in customer', async () => {
@@ -194,7 +194,7 @@ describe('Coupons', function coupons() {
     expect(off.doc.state).to.equal('disabled');
 
     const unused = await coupon({ code: 'UNUSED' });
-    expect((await AdminCouponsService.remove(unused.id)).doc).to.exist;
+    expect((await AdminCouponsService.remove(unused.id)).doc).to.be.an('object');
   });
 
   it('applies coupons to admin-created COD orders and counts them straight away', async () => {
