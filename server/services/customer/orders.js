@@ -5,6 +5,7 @@ const orderReference = require('../../utils/order-reference');
 const { PAGINATION } = require('../../utils/constant');
 const emailService = require('../email');
 const QikinkService = require('../admin/qikink');
+const CouponService = require('../coupons');
 
 const SHIPPING_FEE = 0;
 const TAX_RATE = 0;
@@ -15,7 +16,7 @@ const REFERENCE_RETRIES = 5;
 // never trusted for the amount actually charged.
 // `options` lets the admin panel reuse the same pricing/stock rules for orders
 // it creates (offline prepaid or COD), including products still in draft.
-const create = async ({ items, shipping }, customerId, {
+const create = async ({ items, shipping, couponCode }, customerId, {
   source = 'storefront', paymentGateway = 'razorpay', allowDraft = false,
 } = {}) => {
   const skus = items.map((item) => item.sku);
@@ -64,6 +65,17 @@ const create = async ({ items, shipping }, customerId, {
 
   if (failure) return failure;
 
+  // Coupon is checked before any stock moves, so a bad code changes nothing.
+  let applied = null;
+  if (couponCode && String(couponCode).trim()) {
+    const result = await CouponService.evaluate(couponCode, {
+      subtotal, customerId, email: shipping.email,
+    });
+    if (result.errors) return { type: 'field-validation', errors: result.errors };
+    applied = result;
+  }
+  const discount = applied ? applied.discount : 0;
+
   // Atomically decrement stock per variant. Using findOneAndUpdate with a
   // stock condition makes each decrement safe without a multi-document
   // transaction — if stock dropped below qty between the read and the
@@ -88,7 +100,7 @@ const create = async ({ items, shipping }, customerId, {
   }
 
   const tax = Number((subtotal * TAX_RATE).toFixed(2));
-  const total = Number((subtotal + SHIPPING_FEE + tax).toFixed(2));
+  const total = Number((subtotal - discount + SHIPPING_FEE + tax).toFixed(2));
   const currency = resolvedItems[0]?.product.currency || 'INR';
 
   let order;
@@ -102,6 +114,10 @@ const create = async ({ items, shipping }, customerId, {
         source,
         paymentGateway,
         subtotal,
+        discount,
+        couponId: applied?.coupon._id,
+        couponCode: applied?.coupon.code,
+        couponHolder: applied?.holder || undefined,
         shippingFee: SHIPPING_FEE,
         tax,
         total,

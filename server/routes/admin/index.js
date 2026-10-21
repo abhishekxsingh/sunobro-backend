@@ -5,6 +5,7 @@ const orders = require('./orders');
 const products = require('./products');
 const profile = require('./profile');
 const qikink = require('./qikink');
+const coupons = require('./coupons');
 
 module.exports = (router) => {
   auth(router);
@@ -14,4 +15,5 @@ module.exports = (router) => {
   products(router);
   profile(router);
   qikink(router);
+  coupons(router);
 };

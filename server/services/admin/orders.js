@@ -4,12 +4,16 @@ const { PAGINATION } = require('../../utils/constant');
 const QikinkService = require('./qikink');
 const emailService = require('../email');
 const CustomerOrdersService = require('../customer/orders');
+const CouponService = require('../coupons');
 
 const toQueueOrder = (order) => ({
   id: order.id,
   ref: order.reference,
   client: `${order.shippingFirstName} ${order.shippingLastName}`,
   value: order.total,
+  subtotal: order.subtotal,
+  discount: order.discount || 0,
+  couponCode: order.couponCode || null,
   currency: order.currency,
   status: order.status,
   createdAt: order.createdAt,
@@ -73,6 +77,8 @@ const updateStatus = async (orderId, { status, note }) => {
   order.status = status;
   order.statusHistory.push({ status, note: historyNote });
   await order.save();
+  if (status === 'cancelled') await CouponService.release(order._id);
+  else if (['paid', 'shipped', 'delivered'].includes(status)) await CouponService.redeem(order._id);
   if (previous !== status && order.shippingEmail) {
     emailService.sendOrderStatus({ to: order.shippingEmail, order }).catch(() => {});
   }
@@ -85,9 +91,9 @@ const updateStatus = async (orderId, { status, note }) => {
  * Qikink delivers and collects. Either way it can go straight to Qikink.
  */
 const create = async ({
-  items, shipping, paymentMethod, note, pushToQikink: push = true,
+  items, shipping, paymentMethod, note, couponCode, pushToQikink: push = true,
 }) => {
-  const result = await CustomerOrdersService.create({ items, shipping }, null, {
+  const result = await CustomerOrdersService.create({ items, shipping, couponCode }, null, {
     source: 'admin',
     paymentGateway: paymentMethod === 'cod' ? 'cod' : 'manual',
     allowDraft: true,
@@ -108,6 +114,8 @@ const create = async ({
   };
   if (paymentMethod !== 'cod') update.$set = { status: 'paid' };
   let order = await Order.findByIdAndUpdate(result.doc._id, update, { new: true });
+  // Prepaid is paid now; COD is a committed order too — both count as a use.
+  await CouponService.redeem(order._id);
 
   if (push) {
     const fulfilled = await QikinkService.fulfillOrder(order._id);

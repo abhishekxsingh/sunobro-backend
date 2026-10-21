@@ -78,6 +78,15 @@ Register static paths (`/orders/me`, `/admin/products/bulk`) **before** `/:id` r
 - Customer `toOrderDTO` never exposes `qikinkError`; internal states show as `Processing`.
 - Order totals: `SHIPPING_FEE = 0`, `TAX_RATE = 0`. Client-sent totals are ignored.
 
+## Coupons
+
+- `Coupon` model: `code` (unique, upper-case), `kind` (general / festival / seasonal / customer — a label), `discountType` percent|flat, `value`, `maxDiscount` (percent cap), `minOrderValue`, `customerIds` (non-empty = only those logged-in customers), `startsAt`/`endsAt`, `usageLimit` (total), `perCustomerLimit` (default 1, null = unlimited), `firstOrderOnly`, `showAtCheckout` (listed as an offer), `active`, `usedCount`.
+- Rules live in `services/coupons.js` (`evaluate`, `check`, `discountFor`, `redeem`, `release`, `available`). Discount never takes an order below ₹1 (Razorpay minimum).
+- `POST /orders` takes `couponCode`; the order stores `subtotal`, `discount`, `couponId`, `couponCode`, `couponHolder` (`c:<customerId>` or `e:<email>`), `total = subtotal − discount`.
+- **A use counts only when the order is paid** (`markPaidAndFulfill`, admin prepaid/COD create, admin status → paid/shipped/delivered) via `couponCounted` — abandoned pending orders don't burn a customer's coupon. Cancelling releases the use. `POST /payments/create-order` re-checks the coupon (expired / used up / already used by this shopper) and returns 409 asking to remove it.
+- Qikink line prices are scaled by `(subtotal − discount) / subtotal` so they add up to `total_order_value`. The confirmation email shows the coupon line.
+- Endpoints: storefront `GET /coupons/available` (public offers + coupons issued to the logged-in customer), `POST /coupons/validate` `{ code, items, email? }` (preview; per-customer checks skipped until there's an email). Admin `GET/POST /admin/coupons`, `PUT/DELETE /admin/coupons/:id` (delete refused once on an order — switch off instead), `GET /admin/coupons/:id/redemptions`, `GET /admin/customers/search?q=`. Admin orders accept `couponCode`.
+
 ## Auth pattern
 
 httpOnly cookies only (no Bearer tokens). JWT payload includes `type: 'admin' | 'customer'` (TOKEN_TYPE); middleware rejects a token of the wrong type. Cookie names configurable via `ADMIN_SESSION_COOKIE` / `CUSTOMER_SESSION_COOKIE`.
