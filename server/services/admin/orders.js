@@ -10,6 +10,9 @@ const toQueueOrder = (order) => ({
   id: order.id,
   ref: order.reference,
   client: `${order.shippingFirstName} ${order.shippingLastName}`,
+  customerId: order.customerId ? String(order.customerId) : null,
+  email: order.shippingEmail || null,
+  phone: order.shippingPhone || null,
   value: order.total,
   subtotal: order.subtotal,
   discount: order.discount || 0,
@@ -34,14 +37,42 @@ const toQueueOrder = (order) => ({
 
 const invalidId = (id) => !mongoose.isValidObjectId(id);
 
-const list = async ({ page = 1, limit = PAGINATION.DEFAULT_LIMIT } = {}) => {
+const ORDER_SEARCH_FIELDS = [
+  'reference', 'shippingFirstName', 'shippingLastName', 'shippingEmail', 'shippingPhone',
+  'shippingCity', 'shippingPostalCode', 'items.name', 'items.sku', 'items.qikinkSku', 'items.color',
+  'qikinkOrderId', 'qikinkAwb', 'couponCode', 'razorpayPaymentId',
+];
+const ORDER_STATUSES = ['pending', 'paid', 'shipped', 'delivered', 'cancelled'];
+
+/**
+ * Every word of `q` must match some field: "riya black" finds Riya's orders
+ * with a black tee; also order ref, email, phone, product, SKU, AWB, coupon.
+ */
+const searchFilter = (q, status) => {
+  const filter = {};
+  if (ORDER_STATUSES.includes(status)) filter.status = status;
+  const words = String(q || '').trim().split(/\s+/).filter(Boolean)
+    .slice(0, 5);
+  if (words.length) {
+    filter.$and = words.map((word) => {
+      const rx = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      return { $or: ORDER_SEARCH_FIELDS.map((field) => ({ [field]: rx })) };
+    });
+  }
+  return filter;
+};
+
+const list = async ({
+  page = 1, limit = PAGINATION.DEFAULT_LIMIT, q, status,
+} = {}) => {
   const cappedLimit = Math.min(Number(limit) || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
   const currentPage = Math.max(Number(page) || 1, 1);
   const skip = (currentPage - 1) * cappedLimit;
+  const filter = searchFilter(q, status);
 
   const [orders, count] = await Promise.all([
-    Order.find({}).sort({ createdAt: -1 }).skip(skip).limit(cappedLimit),
-    Order.countDocuments(),
+    Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(cappedLimit),
+    Order.countDocuments(filter),
   ]);
 
   await QikinkService.syncOrders(orders);

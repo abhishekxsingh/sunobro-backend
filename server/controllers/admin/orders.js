@@ -4,8 +4,14 @@ const Validator = require('../../utils/validator');
 
 const list = async (req, res) => {
   try {
-    const { query: { page, limit } } = req;
-    const { doc, meta } = await AdminOrdersService.list({ page, limit });
+    const {
+      query: {
+        page, limit, q, status,
+      },
+    } = req;
+    const { doc, meta } = await AdminOrdersService.list({
+      page, limit, q, status,
+    });
 
     res.setHeader('x-coreplatform-total-records', meta.totalRecords);
     res.setHeader('x-coreplatform-page', meta.page);
