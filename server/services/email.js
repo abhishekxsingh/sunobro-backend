@@ -4,6 +4,7 @@ const logger = require('../utils/logger');
 
 const FROM = process.env.FROM_EMAIL || 'SunoBro <orders@sunobro.com>';
 const SITE = 'https://www.sunobro.com';
+const LOGO = `${SITE}/brand/logo-mark-192.png`;
 
 let resendClient = null;
 const getResend = () => {
@@ -101,9 +102,18 @@ const frame = ({
           </tr>
           <tr>
             <td style="padding:32px 28px 28px;font-family:Arial,Helvetica,sans-serif;color:#eceef6;">
-              <p style="margin:0 0 28px;font-size:13px;letter-spacing:0.22em;font-weight:700;color:#c9d2ff;">
-                SUNOBRO
-              </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+                <tr>
+                  <td style="padding-right:12px;vertical-align:middle;">
+                    <img src="${LOGO}" width="40" height="40" alt="SunoBro"
+                      style="display:block;width:40px;height:40px;border:0;border-radius:10px;outline:none;" />
+                  </td>
+                  <td style="vertical-align:middle;font-family:Arial,Helvetica,sans-serif;
+                    font-size:14px;letter-spacing:0.22em;font-weight:700;color:#c9d2ff;">
+                    SUNOBRO
+                  </td>
+                </tr>
+              </table>
               <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#9aa0b5;">
                 ${esc(eyebrow)}
               </p>
