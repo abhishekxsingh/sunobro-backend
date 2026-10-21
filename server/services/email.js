@@ -30,12 +30,12 @@ const getSmtp = () => {
 
 const mailConfigured = () => Boolean(getSmtp() || process.env.RESEND_API_KEY);
 
-const deliver = async ({ to, subject, html }) => {
+const deliver = async ({ to, subject, html, text }) => {
   const smtp = getSmtp();
   if (smtp) {
     const from = process.env.SMTP_FROM || `SunoBro <${process.env.SMTP_USER}>`;
     await smtp.sendMail({
-      from, to, subject, html,
+      from, to, subject, html, text,
     });
     return;
   }
@@ -213,6 +213,24 @@ const sendWelcome = async ({ to, name }) => {
   }
 };
 
+const noticeRow = (label, detail) => `
+<tr>
+  <td style="padding:0 0 10px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+      style="background:#12151c;border:1px solid #2c3140;">
+      <tr>
+        <td style="width:4px;background:#c9d2ff;font-size:0;line-height:0;">&nbsp;</td>
+        <td style="padding:12px 14px;font-family:Arial,Helvetica,sans-serif;">
+          <p style="margin:0 0 3px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#c9d2ff;">
+            ${esc(label)}
+          </p>
+          <p style="margin:0;font-size:14px;line-height:1.5;color:#eceef6;">${esc(detail)}</p>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>`;
+
 const sendDropNotice = async ({ to }) => {
   if (!mailConfigured()) {
     const error = new Error('Email transport not configured');
@@ -221,23 +239,42 @@ const sendDropNotice = async ({ to }) => {
   }
 
   const html = frame({
-    preheader: "Welcome. You're on the list for the next SunoBro drop.",
-    eyebrow: 'Welcome',
-    title: "You're in.",
-    intro: 'This address is saved. When a new tee or hoodie goes live, you hear it here first.',
+    preheader: "You're on the SunoBro list. We'll email you when the next drop goes live.",
+    eyebrow: 'Drop list',
+    title: "You're on the list.",
+    intro: 'This address is saved. When a new tee or hoodie goes live, this inbox hears it first.',
     bodyHtml: `
-      <p style="margin:18px 0 0;font-size:15px;line-height:1.7;color:#c5cad8;">
-        The current collection is already up. Heavyweight organic fabric, printed when you order,
-        shipped across India.
-      </p>`,
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;">
+        <tr>
+          <td style="padding:14px 16px;background:#12151c;border:1px solid #2c3140;font-family:Arial,Helvetica,sans-serif;">
+            <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#9aa0b5;">
+              Confirmation sent to
+            </p>
+            <p style="margin:0;font-size:16px;font-weight:700;color:#ffffff;">${esc(to)}</p>
+          </td>
+        </tr>
+      </table>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;">
+        ${noticeRow('Next drop', 'You get the note before the piece is public.')}
+        ${noticeRow('Made to order', 'Heavyweight fabric, printed when you buy.')}
+        ${noticeRow('Ships across India', 'The current collection is already open.')}
+      </table>`,
     ctaHref: `${SITE}/products`,
     ctaLabel: 'Shop the collection',
   });
 
   await deliver({
     to,
-    subject: "Welcome — you're on the SunoBro list",
+    subject: "You're on the SunoBro list",
     html,
+    text: [
+      "You're on the SunoBro list.",
+      '',
+      `Confirmation sent to ${to}.`,
+      'When a new tee or hoodie goes live, this inbox hears it first.',
+      '',
+      `Shop the collection: ${SITE}/products`,
+    ].join('\n'),
   });
 };
 
