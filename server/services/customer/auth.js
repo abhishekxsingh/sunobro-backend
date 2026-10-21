@@ -105,6 +105,17 @@ const loginWithFirebase = async ({ idToken }) => {
     return { errors: [{ name: 'customer', message: 'Could not open this account.' }] };
   }
 
+  // Fill the profile from Google where it's empty — never overwrite what the
+  // customer typed themselves.
+  const fromGoogle = {};
+  if (decoded.picture && customer.avatarUrl !== decoded.picture) fromGoogle.avatarUrl = decoded.picture;
+  if (decoded.phone_number && !customer.phone) fromGoogle.phone = decoded.phone_number;
+  if (decoded.name && !customer.name) fromGoogle.name = decoded.name;
+  if (Object.keys(fromGoogle).length) {
+    customer.set(fromGoogle);
+    await customer.save();
+  }
+
   if (created) {
     emailService.sendWelcome({ to: customer.email, name: customer.name }).catch(() => {});
   }

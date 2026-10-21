@@ -155,6 +155,15 @@ const create = async ({ items, shipping, couponCode }, customerId, {
     throw new Error('Could not allocate an order reference. Try again.');
   }
 
+  // First order from an account without a phone (typical after Google
+  // sign-in): keep the checkout phone on the profile for next time.
+  if (customerId && shipping.phone) {
+    await Customer.updateOne(
+      { _id: customerId, $or: [{ phone: null }, { phone: '' }, { phone: { $exists: false } }] },
+      { $set: { phone: shipping.phone } },
+    );
+  }
+
   // Send confirmation email — fire-and-forget, never blocks the response.
   const toEmail = order.shippingEmail
     || (customerId ? (await Customer.findById(customerId).select('email').lean())?.email : null);
