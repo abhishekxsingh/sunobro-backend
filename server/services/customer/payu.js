@@ -103,11 +103,40 @@ const createPayment = async (order) => {
     salt: PAYU.SALT,
   });
   const phone = String(order.shippingPhone || '').replace(/\D/g, '').slice(-10);
+  if (phone.length !== 10) {
+    return {
+      errors: [{ name: 'phone', message: 'Enter a 10-digit mobile number. PayU uses it to open checkout.' }],
+    };
+  }
   const surl = callbackUrl();
 
   order.payuTxnId = txnid;
   order.paymentGateway = 'payu';
   await order.save();
+
+  const fields = {
+    key: PAYU.KEY,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    lastname: clean(order.shippingLastName, 60),
+    email,
+    phone,
+    surl,
+    furl: surl,
+    curl: surl,
+    udf1,
+    address1: clean(order.shippingStreet, 100),
+    city: clean(order.shippingCity, 50),
+    state: clean(order.shippingState, 50),
+    country: clean(order.shippingCountry, 50),
+    zipcode: clean(order.shippingPostalCode, 20),
+    hash,
+  };
+  Object.keys(fields).forEach((key) => {
+    if (fields[key] === '') delete fields[key];
+  });
 
   return {
     doc: {
@@ -117,23 +146,7 @@ const createPayment = async (order) => {
       gateway: 'payu',
       orderReference: order.reference,
       action: PAYU.CHECKOUT_URL,
-      fields: {
-        key: PAYU.KEY,
-        txnid,
-        amount,
-        productinfo,
-        firstname,
-        lastname: clean(order.shippingLastName, 60),
-        email,
-        phone,
-        surl,
-        furl: surl,
-        curl: surl,
-        udf1,
-        pg: '',
-        bankcode: '',
-        hash,
-      },
+      fields,
     },
   };
 };
