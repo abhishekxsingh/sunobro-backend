@@ -34,6 +34,8 @@ module.exports = {
   PAYU: {
     KEY: process.env.PAYU_MERCHANT_KEY || 'ajSnyh',
     SALT: process.env.PAYU_MERCHANT_SALT || 'Eg2chVYGRCoUUayEGxwCIgZatcXoRTQE',
+    CLIENT_ID: process.env.PAYU_CLIENT_ID || '0845b77ded81c665315a098741332eb3061041a53cfdc44ce7097d9ede73e6cc',
+    CLIENT_SECRET: process.env.PAYU_CLIENT_SECRET || '31b1332b49394a90cc43828cc705bf1bd824f1adecc425ed5dff5a5e4e4bec0f',
     ENV: 'production',
     CHECKOUT_URL: 'https://secure.payu.in/_payment',
     VERIFY_URL: 'https://info.payu.in/merchant/postservice.php?form=2',
@@ -54,11 +56,9 @@ module.exports = {
   // Cashfree sandbox app. Requests go to sandbox.cashfree.com unless
   // CASHFREE_ENV=production.
   CASHFREE: {
-    APP_ID: process.env.CASHFREE_APP_ID || '0845b77ded81c665315a098741332eb3061041a53cfdc44ce7097d9ede73e6cc',
-    SECRET: process.env.CASHFREE_SECRET || '31b1332b49394a90cc43828cc705bf1bd824f1adecc425ed5dff5a5e4e4bec0f',
-    WEBHOOK_SECRET: process.env.CASHFREE_WEBHOOK_SECRET
-      || process.env.CASHFREE_SECRET
-      || '31b1332b49394a90cc43828cc705bf1bd824f1adecc425ed5dff5a5e4e4bec0f',
+    APP_ID: process.env.CASHFREE_APP_ID || '',
+    SECRET: process.env.CASHFREE_SECRET || '',
+    WEBHOOK_SECRET: process.env.CASHFREE_WEBHOOK_SECRET || process.env.CASHFREE_SECRET || '',
     ENV: process.env.CASHFREE_ENV === 'production' ? 'production' : 'sandbox',
     BASE_URL: process.env.CASHFREE_ENV === 'production'
       ? 'https://api.cashfree.com/pg'
