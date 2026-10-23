@@ -33,8 +33,8 @@ module.exports = {
   // PayU live merchant. Checkout posts to the live hosted page unless
   // PAYU_ENV=test.
   PAYU: {
-    KEY: process.env.PAYU_MERCHANT_KEY || 'qfxxSS',
-    SALT: process.env.PAYU_MERCHANT_SALT || 'q5qHRY7ZPbIeVWt2Btsjk8KikKE8gCHd',
+    KEY: process.env.PAYU_MERCHANT_KEY || 'ajSnyh',
+    SALT: process.env.PAYU_MERCHANT_SALT || 'Eg2chVYGRCoUUayEGxwClgZatcXoRTQE',
     ENV: process.env.PAYU_ENV === 'test' ? 'test' : 'production',
     CHECKOUT_URL: process.env.PAYU_ENV === 'test'
       ? 'https://test.payu.in/_payment'
