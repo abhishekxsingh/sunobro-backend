@@ -33,7 +33,7 @@ module.exports = {
   // PayU live merchant only. Checkout posts to https://secure.payu.in/_payment.
   PAYU: {
     KEY: process.env.PAYU_MERCHANT_KEY || 'ajSnyh',
-    SALT: process.env.PAYU_MERCHANT_SALT || 'Eg2chVYGRCoUUayEGxwClgZatcXoRTQE',
+    SALT: process.env.PAYU_MERCHANT_SALT || 'Eg2chVYGRCoUUayEGxwCIgZatcXoRTQE',
     ENV: 'production',
     CHECKOUT_URL: 'https://secure.payu.in/_payment',
     VERIFY_URL: 'https://info.payu.in/merchant/postservice.php?form=2',
