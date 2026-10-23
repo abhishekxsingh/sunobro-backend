@@ -66,17 +66,6 @@ module.exports = {
     // Background status sync + failed-push retry. 0 disables it.
     SYNC_INTERVAL_MS: Number(process.env.QIKINK_SYNC_INTERVAL_MS ?? 15 * 60 * 1000),
   },
-  SMS: {
-    SERVICE_URL: process.env.SMS_SERVICE_URL || 'https://api.pinnacle.in/index.php/',
-    API_KEY: process.env.SMS_SERVICE_API_KEY || '',
-    MESSAGE_TYPE: process.env.SMS_MESSAGE_TYPE || 'TXT',
-    SENDER: process.env.SMS_SENDER || 'GETPSA',
-    // One principal entity for every SMS. Template ids are per message.
-    ENTITY_ID: process.env.SMS_DLT_ENTITY_ID || '1701171628079680260',
-    TEMPLATES: {
-      LOGIN_OTP: process.env.SMS_DLT_TEMPLATE_ID || '1777179261336920608',
-    },
-  },
   FIREBASE: {
     PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'sunobro',
     CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
