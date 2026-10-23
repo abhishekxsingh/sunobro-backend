@@ -30,18 +30,13 @@ module.exports = {
     KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'zYopewN0OGJoJ4G8btkUe35o',
     WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
-  // PayU live merchant. Checkout posts to the live hosted page unless
-  // PAYU_ENV=test.
+  // PayU live merchant only. Checkout posts to https://secure.payu.in/_payment.
   PAYU: {
     KEY: process.env.PAYU_MERCHANT_KEY || 'ajSnyh',
     SALT: process.env.PAYU_MERCHANT_SALT || 'Eg2chVYGRCoUUayEGxwClgZatcXoRTQE',
-    ENV: process.env.PAYU_ENV === 'test' ? 'test' : 'production',
-    CHECKOUT_URL: process.env.PAYU_ENV === 'test'
-      ? 'https://test.payu.in/_payment'
-      : 'https://secure.payu.in/_payment',
-    VERIFY_URL: process.env.PAYU_ENV === 'test'
-      ? 'https://test.payu.in/merchant/postservice.php?form=2'
-      : 'https://info.payu.in/merchant/postservice.php?form=2',
+    ENV: 'production',
+    CHECKOUT_URL: 'https://secure.payu.in/_payment',
+    VERIFY_URL: 'https://info.payu.in/merchant/postservice.php?form=2',
   },
   // Easebuzz stays off in admin until a key and salt are set.
   // EASEBUZZ_ENV=test uses testpay.easebuzz.in.
