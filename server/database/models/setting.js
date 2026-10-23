@@ -4,7 +4,7 @@ const settingSchema = new Schema({
   key: { type: String, required: true, unique: true },
   activeGateway: {
     type: String,
-    enum: ['razorpay', 'payu', 'cashfree'],
+    enum: ['razorpay', 'payu', 'easebuzz', 'cashfree'],
     default: 'payu',
   },
 }, { timestamps: true });

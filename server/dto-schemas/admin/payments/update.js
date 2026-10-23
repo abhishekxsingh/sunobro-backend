@@ -4,7 +4,7 @@ module.exports = {
   properties: {
     activeGateway: {
       type: 'string',
-      enum: ['razorpay', 'payu', 'cashfree'],
+      enum: ['razorpay', 'payu', 'easebuzz', 'cashfree'],
     },
   },
   required: ['activeGateway'],
@@ -13,7 +13,7 @@ module.exports = {
       activeGateway: 'Parameter: activeGateway is required.',
     },
     properties: {
-      activeGateway: 'Parameter: activeGateway must be razorpay, payu, or cashfree.',
+      activeGateway: 'Parameter: activeGateway must be razorpay, payu, easebuzz, or cashfree.',
     },
   },
   additionalProperties: false,

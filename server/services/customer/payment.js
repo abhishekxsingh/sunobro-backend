@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const mongoose = require('mongoose');
 const { Order } = require('../../database/models');
-const { RAZORPAY, PAYU } = require('../../config');
+const { RAZORPAY, PAYU, EASEBUZZ } = require('../../config');
 const QikinkService = require('../admin/qikink');
 const emailService = require('../email');
 const CouponService = require('../coupons');
@@ -10,10 +10,12 @@ const logger = require('../../utils/logger');
 const PaymentSettings = require('./payment-settings');
 const Payu = require('./payu');
 const Cashfree = require('./cashfree');
+const Easebuzz = require('./easebuzz');
 
 const GATEWAY_LABEL = {
   razorpay: 'Razorpay',
   payu: 'PayU',
+  easebuzz: 'Easebuzz',
   cashfree: 'Cashfree',
 };
 
@@ -36,6 +38,7 @@ const markPaidAndFulfill = async (order, paymentId, gateway) => {
   const via = gateway || order.paymentGateway || 'razorpay';
   const set = { status: 'paid' };
   if (via === 'payu') set.payuPaymentId = paymentId || order.payuPaymentId;
+  else if (via === 'easebuzz') set.easebuzzPaymentId = paymentId || order.easebuzzPaymentId;
   else if (via === 'cashfree') set.cashfreePaymentId = paymentId || order.cashfreePaymentId;
   else set.razorpayPaymentId = paymentId || order.razorpayPaymentId;
 
@@ -58,9 +61,11 @@ const markPaidAndFulfill = async (order, paymentId, gateway) => {
     const current = await Order.findById(order._id);
     const field = via === 'payu'
       ? 'payuPaymentId'
-      : via === 'cashfree'
-        ? 'cashfreePaymentId'
-        : 'razorpayPaymentId';
+      : via === 'easebuzz'
+        ? 'easebuzzPaymentId'
+        : via === 'cashfree'
+          ? 'cashfreePaymentId'
+          : 'razorpayPaymentId';
     if (current && paymentId && !current[field]) {
       current[field] = paymentId;
       await current.save();
@@ -173,6 +178,7 @@ const createOrder = async ({ orderId }) => {
 
   const gateway = await PaymentSettings.getActive();
   if (gateway === 'payu') return Payu.createPayment(loaded.order);
+  if (gateway === 'easebuzz') return Easebuzz.createPayment(loaded.order);
   if (gateway === 'cashfree') return Cashfree.createPayment(loaded.order);
   return createRazorpayOrder(loaded.order);
 };
@@ -209,6 +215,41 @@ const handlePayuReturn = async (body) => {
   }
 
   const updated = await markPaidAndFulfill(order, body.mihpayid || remote.paymentId, 'payu');
+  return { ok: true, orderId: updated.id, reference: updated.reference };
+};
+
+const handleEasebuzzReturn = async (body) => {
+  const fail = (message) => ({ ok: false, message });
+  if (!body || body.key !== EASEBUZZ.KEY) {
+    return fail('Payment could not be verified.');
+  }
+  if (!Easebuzz.hashMatches(body)) {
+    return fail('Payment could not be verified.');
+  }
+
+  const order = await Order.findOne({ easebuzzTxnId: body.txnid });
+  if (!order) return fail('Order not found for this payment.');
+  if (String(body.udf1 || '') !== String(order.id)) {
+    return fail('Payment does not match this order.');
+  }
+  if (Easebuzz.amountString(order.total) !== String(body.amount)) {
+    return fail('Payment amount does not match the order.');
+  }
+  if (order.status === 'paid') {
+    return { ok: true, orderId: order.id, reference: order.reference };
+  }
+  if (order.status !== 'pending') return fail(`Order is already ${order.status}.`);
+  if (String(body.status || '').toLowerCase() !== 'success') {
+    return fail(body.error_Message || 'Payment was not completed.');
+  }
+
+  const remote = await Easebuzz.verifyRemote(body.txnid);
+  if (!remote.ok) return fail(remote.message);
+  if (remote.amount && Number(remote.amount).toFixed(2) !== Easebuzz.amountString(order.total)) {
+    return fail('Easebuzz amount does not match the order.');
+  }
+
+  const updated = await markPaidAndFulfill(order, body.easepayid || remote.paymentId, 'easebuzz');
   return { ok: true, orderId: updated.id, reference: updated.reference };
 };
 
@@ -261,10 +302,10 @@ const verify = async ({
     return paidDoc(await markPaidAndFulfill(order, checked.paymentId, 'cashfree'));
   }
 
-  if (order.paymentGateway === 'payu') {
+  if (order.paymentGateway === 'payu' || order.paymentGateway === 'easebuzz') {
     return {
       type: 'conflict',
-      errors: [{ name: 'gateway', message: 'PayU payments are confirmed when PayU redirects back.' }],
+      errors: [{ name: 'gateway', message: 'This payment is confirmed when the gateway redirects back.' }],
     };
   }
 
@@ -296,6 +337,7 @@ module.exports = {
   createOrder,
   verify,
   handlePayuReturn,
+  handleEasebuzzReturn,
   markPaidAndFulfill,
   verifySignature,
   hmacMatches,

@@ -40,13 +40,13 @@ const active = async (req, res) => {
   }
 };
 
-const payuReturn = async (req, res) => {
+const hostedReturn = (handler) => async (req, res) => {
   const failed = (message) => {
     const reason = encodeURIComponent(message || 'Payment was not completed.');
     return res.redirect(storefront(`/checkout?payment=failed&reason=${reason}`));
   };
   try {
-    const result = await PaymentService.handlePayuReturn(req.body || {});
+    const result = await handler(req.body || {});
     if (!result.ok) return failed(result.message);
     const id = encodeURIComponent(result.orderId);
     const ref = encodeURIComponent(result.reference);
@@ -82,6 +82,9 @@ const verify = async (req, res) => {
   }
 };
 
+const payuReturn = hostedReturn(PaymentService.handlePayuReturn);
+const easebuzzReturn = hostedReturn(PaymentService.handleEasebuzzReturn);
+
 module.exports = {
-  createOrder, verify, active, payuReturn,
+  createOrder, verify, active, payuReturn, easebuzzReturn,
 };

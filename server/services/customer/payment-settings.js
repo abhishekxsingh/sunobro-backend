@@ -1,7 +1,7 @@
 const { Setting } = require('../../database/models');
-const { RAZORPAY, PAYU, CASHFREE } = require('../../config');
+const { RAZORPAY, PAYU, CASHFREE, EASEBUZZ } = require('../../config');
 
-const GATEWAYS = ['payu', 'razorpay', 'cashfree'];
+const GATEWAYS = ['payu', 'razorpay', 'easebuzz', 'cashfree'];
 
 const isDummy = (value) => !value || String(value).toLowerCase().startsWith('dummy');
 
@@ -19,6 +19,13 @@ const describe = () => ([
     mode: String(RAZORPAY.KEY_ID || '').startsWith('rzp_test') ? 'test' : 'live',
     configured: Boolean(RAZORPAY.KEY_ID && RAZORPAY.KEY_SECRET),
     dummy: isDummy(RAZORPAY.KEY_ID) || isDummy(RAZORPAY.KEY_SECRET),
+  },
+  {
+    id: 'easebuzz',
+    label: 'Easebuzz',
+    mode: EASEBUZZ.ENV,
+    configured: Boolean(EASEBUZZ.KEY && EASEBUZZ.SALT),
+    dummy: isDummy(EASEBUZZ.KEY) || isDummy(EASEBUZZ.SALT),
   },
   {
     id: 'cashfree',
@@ -41,7 +48,7 @@ const snapshot = async () => ({
 
 const setActive = async (activeGateway) => {
   if (!GATEWAYS.includes(activeGateway)) {
-    return { errors: [{ name: 'activeGateway', message: 'Choose Razorpay, PayU, or Cashfree.' }] };
+    return { errors: [{ name: 'activeGateway', message: 'Choose PayU, Razorpay, Easebuzz, or Cashfree.' }] };
   }
   const gateway = describe().find((item) => item.id === activeGateway);
   if (!gateway.configured) {

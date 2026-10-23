@@ -51,8 +51,8 @@ const orderSchema = new Schema({
   estimatedArrival: { type: String },
   items: { type: [orderItemSchema], default: [] },
   statusHistory: { type: [statusHistorySchema], default: [] },
-  // razorpay / payu / cashfree = storefront checkout (whichever is active in
-  // admin settings). manual = prepaid collected offline by an admin.
+  // razorpay / payu / easebuzz / cashfree = storefront checkout (whichever is
+  // active in admin settings). manual = prepaid collected offline by an admin.
   // cod = cash on delivery collected by Qikink.
   paymentGateway: { type: String, default: 'razorpay' },
   source: { type: String, enum: ['storefront', 'admin'], default: 'storefront' },
@@ -62,6 +62,8 @@ const orderSchema = new Schema({
   payuPaymentId: { type: String },
   cashfreeOrderId: { type: String },
   cashfreePaymentId: { type: String },
+  easebuzzTxnId: { type: String },
+  easebuzzPaymentId: { type: String },
   qikinkOrderId: { type: String },
   qikinkOrderNumber: { type: String },
   qikinkStatus: { type: String },

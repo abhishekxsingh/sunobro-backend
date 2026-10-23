@@ -43,6 +43,19 @@ module.exports = {
       ? 'https://test.payu.in/merchant/postservice.php?form=2'
       : 'https://info.payu.in/merchant/postservice.php?form=2',
   },
+  // Easebuzz stays off in admin until a key and salt are set.
+  // EASEBUZZ_ENV=test uses testpay.easebuzz.in.
+  EASEBUZZ: {
+    KEY: process.env.EASEBUZZ_MERCHANT_KEY || '',
+    SALT: process.env.EASEBUZZ_MERCHANT_SALT || '',
+    ENV: process.env.EASEBUZZ_ENV === 'test' ? 'test' : 'production',
+    BASE_URL: process.env.EASEBUZZ_ENV === 'test'
+      ? 'https://testpay.easebuzz.in'
+      : 'https://pay.easebuzz.in',
+    RETRIEVE_URL: process.env.EASEBUZZ_ENV === 'test'
+      ? 'https://testdashboard.easebuzz.in/transaction/v2.1/retrieve'
+      : 'https://dashboard.easebuzz.in/transaction/v2.1/retrieve',
+  },
   // Cashfree sandbox app. Requests go to sandbox.cashfree.com unless
   // CASHFREE_ENV=production.
   CASHFREE: {
