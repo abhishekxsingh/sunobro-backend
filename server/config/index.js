@@ -24,10 +24,37 @@ module.exports = {
   JWT_SECRET: process.env.JWT_SECRET,
   ADMIN_SESSION_COOKIE: process.env.ADMIN_SESSION_COOKIE || 'sb_admin_session',
   CUSTOMER_SESSION_COOKIE: process.env.CUSTOMER_SESSION_COOKIE || 'sb_session',
+  STOREFRONT_URL: process.env.STOREFRONT_URL || 'http://localhost:3001',
   RAZORPAY: {
     KEY_ID: process.env.RAZORPAY_KEY_ID || 'rzp_live_TPuJb9rvL5n6bY',
     KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'zYopewN0OGJoJ4G8btkUe35o',
     WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+  },
+  // PayU test merchant. Checkout posts to the test hosted page unless
+  // PAYU_ENV=production.
+  PAYU: {
+    KEY: process.env.PAYU_MERCHANT_KEY || 'qfxxSS',
+    SALT: process.env.PAYU_MERCHANT_SALT || 'q5qHRY7ZPbIeVWt2Btsjk8KikKE8gCHd',
+    ENV: process.env.PAYU_ENV === 'production' ? 'production' : 'test',
+    CHECKOUT_URL: process.env.PAYU_ENV === 'production'
+      ? 'https://secure.payu.in/_payment'
+      : 'https://test.payu.in/_payment',
+    VERIFY_URL: process.env.PAYU_ENV === 'production'
+      ? 'https://info.payu.in/merchant/postservice.php?form=2'
+      : 'https://test.payu.in/merchant/postservice.php?form=2',
+  },
+  // Cashfree sandbox app. Requests go to sandbox.cashfree.com unless
+  // CASHFREE_ENV=production.
+  CASHFREE: {
+    APP_ID: process.env.CASHFREE_APP_ID || '0845b77ded81c665315a098741332eb3061041a53cfdc44ce7097d9ede73e6cc',
+    SECRET: process.env.CASHFREE_SECRET || '31b1332b49394a90cc43828cc705bf1bd824f1adecc425ed5dff5a5e4e4bec0f',
+    WEBHOOK_SECRET: process.env.CASHFREE_WEBHOOK_SECRET
+      || process.env.CASHFREE_SECRET
+      || '31b1332b49394a90cc43828cc705bf1bd824f1adecc425ed5dff5a5e4e4bec0f',
+    ENV: process.env.CASHFREE_ENV === 'production' ? 'production' : 'sandbox',
+    BASE_URL: process.env.CASHFREE_ENV === 'production'
+      ? 'https://api.cashfree.com/pg'
+      : 'https://sandbox.cashfree.com/pg',
   },
   QIKINK: {
     // ClientId is the same for sandbox and live.
@@ -38,6 +65,17 @@ module.exports = {
     BASE_URL: QIKINK_ENV === 'sandbox' ? 'https://sandbox.qikink.com' : 'https://api.qikink.com',
     // Background status sync + failed-push retry. 0 disables it.
     SYNC_INTERVAL_MS: Number(process.env.QIKINK_SYNC_INTERVAL_MS ?? 15 * 60 * 1000),
+  },
+  SMS: {
+    SERVICE_URL: process.env.SMS_SERVICE_URL || 'https://api.pinnacle.in/index.php/',
+    API_KEY: process.env.SMS_SERVICE_API_KEY || '',
+    MESSAGE_TYPE: process.env.SMS_MESSAGE_TYPE || 'TXT',
+    SENDER: process.env.SMS_SENDER || 'GETPSA',
+    // One principal entity for every SMS. Template ids are per message.
+    ENTITY_ID: process.env.SMS_DLT_ENTITY_ID || '1701171628079680260',
+    TEMPLATES: {
+      LOGIN_OTP: process.env.SMS_DLT_TEMPLATE_ID || '1777179261336920608',
+    },
   },
   FIREBASE: {
     PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'sunobro',

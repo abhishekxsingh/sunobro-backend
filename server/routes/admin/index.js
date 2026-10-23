@@ -8,6 +8,7 @@ const qikink = require('./qikink');
 const coupons = require('./coupons');
 const members = require('./members');
 const customers = require('./customers');
+const payments = require('./payments');
 
 module.exports = (router) => {
   auth(router);
@@ -20,4 +21,5 @@ module.exports = (router) => {
   coupons(router);
   members(router);
   customers(router);
+  payments(router);
 };

@@ -52,12 +52,19 @@ app.use(helmet({
 app.use(cookieParser());
 // Keep the exact request bytes: Razorpay signs the raw webhook body, and a
 // re-serialised JSON.stringify(req.body) will not match its signature.
+const captureRawBody = (req, res, buf) => {
+  req.rawBody = buf;
+};
+
 app.use(express.json({
   // Room for a base64 product sheet on POST /admin/products/import.
   limit: '5mb',
-  verify: (req, res, buf) => {
-    req.rawBody = buf;
-  },
+  verify: captureRawBody,
+}));
+// PayU hosted checkout posts the browser back as application/x-www-form-urlencoded.
+app.use(express.urlencoded({
+  extended: false,
+  verify: captureRawBody,
 }));
 
 app.use('/', routes);
