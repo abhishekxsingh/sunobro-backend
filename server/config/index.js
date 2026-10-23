@@ -30,18 +30,18 @@ module.exports = {
     KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || 'zYopewN0OGJoJ4G8btkUe35o',
     WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
-  // PayU test merchant. Checkout posts to the test hosted page unless
-  // PAYU_ENV=production.
+  // PayU live merchant. Checkout posts to the live hosted page unless
+  // PAYU_ENV=test.
   PAYU: {
     KEY: process.env.PAYU_MERCHANT_KEY || 'qfxxSS',
     SALT: process.env.PAYU_MERCHANT_SALT || 'q5qHRY7ZPbIeVWt2Btsjk8KikKE8gCHd',
-    ENV: process.env.PAYU_ENV === 'production' ? 'production' : 'test',
-    CHECKOUT_URL: process.env.PAYU_ENV === 'production'
-      ? 'https://secure.payu.in/_payment'
-      : 'https://test.payu.in/_payment',
-    VERIFY_URL: process.env.PAYU_ENV === 'production'
-      ? 'https://info.payu.in/merchant/postservice.php?form=2'
-      : 'https://test.payu.in/merchant/postservice.php?form=2',
+    ENV: process.env.PAYU_ENV === 'test' ? 'test' : 'production',
+    CHECKOUT_URL: process.env.PAYU_ENV === 'test'
+      ? 'https://test.payu.in/_payment'
+      : 'https://secure.payu.in/_payment',
+    VERIFY_URL: process.env.PAYU_ENV === 'test'
+      ? 'https://test.payu.in/merchant/postservice.php?form=2'
+      : 'https://info.payu.in/merchant/postservice.php?form=2',
   },
   // Cashfree sandbox app. Requests go to sandbox.cashfree.com unless
   // CASHFREE_ENV=production.
