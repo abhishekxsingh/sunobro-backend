@@ -12,5 +12,6 @@ require('./customer/payment')(router);
 require('./customer/coupons')(router);
 require('./webhook/razorpay')(router);
 require('./webhook/cashfree')(router);
+require('./webhook/payu')(router);
 
 module.exports = router;

@@ -86,7 +86,7 @@ const markPaidAndFulfill = async (order, paymentId, gateway) => {
   }
 
   if (result.shippingEmail) {
-    emailService.sendOrderStatus({ to: result.shippingEmail, order: result }).catch(() => {});
+    emailService.sendOrderConfirmation({ to: result.shippingEmail, order: result }).catch(() => {});
   }
 
   return result;
@@ -197,7 +197,7 @@ const handlePayuReturn = async (body) => {
   if (String(body.udf1 || '') !== String(order.id)) {
     return fail('Payment does not match this order.');
   }
-  if (Payu.amountString(order.total) !== String(body.amount)) {
+  if (Number(body.amount).toFixed(2) !== Payu.amountString(order.total)) {
     return fail('Payment amount does not match the order.');
   }
   if (order.status === 'paid') {
