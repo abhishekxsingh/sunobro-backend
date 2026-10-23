@@ -192,9 +192,51 @@ const verifyRemote = async (txnid) => {
 
 const hashMatches = (body) => safeEqual(responseHash(body, PAYU.SALT), String(body.hash || '').toLowerCase());
 
+// Refund webhooks carry no reverse hash. Confirm the request id with PayU
+// before cancelling an order.
+const verifyRefund = async (requestId) => {
+  const id = String(requestId || '').trim();
+  if (!id) return { ok: false, message: 'PayU refund id is missing.' };
+  const hash = sha512(`${PAYU.KEY}|check_action_status|${id}|${PAYU.SALT}`);
+  const body = new URLSearchParams({
+    key: PAYU.KEY,
+    command: 'check_action_status',
+    var1: id,
+    hash,
+  });
+  const res = await fetch(PAYU.VERIFY_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body,
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { ok: false, message: 'PayU did not return a refund status.' };
+  }
+  const details = data.transaction_details?.[id]
+    || data.transaction_details?.[Object.keys(data.transaction_details || {})[0]];
+  const status = String(details?.status || '').toLowerCase();
+  const action = String(details?.action || 'refund').toLowerCase();
+  if (!details || status !== 'success' || action !== 'refund') {
+    return { ok: false, message: 'PayU has not completed this refund.' };
+  }
+  return {
+    ok: true,
+    amount: String(details.amt || details.amount || ''),
+    requestId: String(details.request_id || id),
+  };
+};
+
 module.exports = {
   createPayment,
   verifyRemote,
+  verifyRefund,
   hashMatches,
   amountString,
   requestHash,
