@@ -13,12 +13,15 @@ const assertTestDatabase = () => {
   }
 };
 
-before(async () => {
+// Atlas can take a few seconds to connect from some networks.
+before(async function connectTestDatabase() {
+  this.timeout(30000);
   await mongoose.connect(MONGODB_URI, { dbName: TEST_DB });
   assertTestDatabase();
 });
 
-after(async () => {
+after(async function dropTestDatabase() {
+  this.timeout(30000);
   assertTestDatabase();
   await mongoose.connection.dropDatabase();
   await mongoose.connection.close();
