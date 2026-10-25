@@ -5,6 +5,7 @@ const QikinkService = require('./qikink');
 const emailService = require('../email');
 const CustomerOrdersService = require('../customer/orders');
 const CouponService = require('../coupons');
+const ManualOrders = require('./manual-orders');
 
 const toQueueOrder = (order) => ({
   id: order.id,
@@ -123,17 +124,30 @@ const updateStatus = async (orderId, { status, note }) => {
  */
 const create = async ({
   items, shipping, paymentMethod, note, couponCode, pushToQikink: push = true,
-}) => {
-  const result = await CustomerOrdersService.create({ items, shipping, couponCode }, null, {
+  customerId, createCustomer, saveAddress, paymentReference, reason,
+}, adminId) => {
+  const linked = await ManualOrders.customerForOrder({ customerId, createCustomer, shipping });
+  if (linked.errors) return { type: 'field-validation', errors: linked.errors };
+  const { customer } = linked;
+  // A linked customer's account email gets the confirmation and counts their coupon use.
+  const orderShipping = customer ? { ...shipping, email: shipping.email || customer.email } : shipping;
+
+  const result = await CustomerOrdersService.create({ items, shipping: orderShipping, couponCode }, customer?._id, {
     source: 'admin',
     paymentGateway: paymentMethod === 'cod' ? 'cod' : 'manual',
     allowDraft: true,
   });
   if (!result.doc) return result;
 
-  const createdNote = paymentMethod === 'cod'
-    ? 'Created by admin — cash on delivery (collected by Qikink).'
-    : 'Created by admin — payment collected offline.';
+  if (customer && saveAddress) await ManualOrders.saveAddressTo(customer, orderShipping);
+
+  const createdNote = [
+    paymentMethod === 'cod'
+      ? 'Created by admin — cash on delivery (collected by Qikink).'
+      : 'Created by admin — payment collected offline.',
+    reason ? `Reason: ${reason}.` : null,
+    paymentReference ? `Payment ref: ${paymentReference}.` : null,
+  ].filter(Boolean).join(' ');
   const update = {
     $push: {
       statusHistory: {
@@ -143,7 +157,12 @@ const create = async ({
       },
     },
   };
-  if (paymentMethod !== 'cod') update.$set = { status: 'paid' };
+  update.$set = {
+    createdByAdmin: adminId || undefined,
+    manualReason: reason || undefined,
+    paymentReference: paymentReference || undefined,
+    ...(paymentMethod !== 'cod' ? { status: 'paid' } : {}),
+  };
   let order = await Order.findByIdAndUpdate(result.doc._id, update, { new: true });
   // Prepaid is paid now; COD is a committed order too — both count as a use.
   await CouponService.redeem(order._id);

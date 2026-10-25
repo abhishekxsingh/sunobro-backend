@@ -56,6 +56,11 @@ const orderSchema = new Schema({
   // cod = cash on delivery collected by Qikink.
   paymentGateway: { type: String, default: 'razorpay' },
   source: { type: String, enum: ['storefront', 'admin'], default: 'storefront' },
+  // Admin-created orders: who placed it, why, and the offline payment ref
+  // (UPI txn id, cash, bank transfer…).
+  createdByAdmin: { type: Schema.Types.ObjectId, ref: 'Admin' },
+  manualReason: { type: String },
+  paymentReference: { type: String },
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
   payuTxnId: { type: String },

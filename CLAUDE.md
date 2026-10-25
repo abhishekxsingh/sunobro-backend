@@ -87,6 +87,12 @@ Register static paths (`/orders/me`, `/admin/products/bulk`) **before** `/:id` r
 - Qikink line prices are scaled by `(subtotal − discount) / subtotal` so they add up to `total_order_value`. The confirmation email shows the coupon line.
 - Endpoints: storefront `GET /coupons/available` (public offers + coupons issued to the logged-in customer), `POST /coupons/validate` `{ code, items, email? }` (preview; per-customer checks skipped until there's an email). Admin `GET/POST /admin/coupons`, `PUT/DELETE /admin/coupons/:id` (delete refused once on an order — switch off instead), `GET /admin/coupons/:id/redemptions`, `GET /admin/customers/search?q=`. Admin orders accept `couponCode`.
 
+## Manual orders (admin)
+
+- `GET /admin/orders/catalog` — active + in-review products with switched-on options (sku, colour, size, price, image, `mapped`) for the order builder.
+- `POST /admin/orders/quote` `{ items, customerId?, email?, couponCode? }` — server-priced lines/subtotal/discount/total, `couponError`, `problems` (unmapped/switched-off), and `offers`: every live coupon this shopper could use (public, unadvertised codes, and ones issued to the customer) with `eligible`, `saving` or `reason`. `services/admin/manual-orders.js`.
+- `POST /admin/orders` also takes `customerId` (links the order: their email, coupon limits, history), `createCustomer` (find/create the account from the shipping email), `saveAddress`, `paymentReference` (UPI/cash/bank ref), `reason`; stored as `paymentReference`, `manualReason`, `createdByAdmin` and in the status note.
+
 ## Customers (admin) and checkout accounts
 
 - **Checkout needs an account.** `POST /orders` is `requireCustomer` (401 for guests); the order uses the account's email. A checkout phone is saved onto a profile that has none (typical after Google sign-in). Google sign-in fills `avatarUrl` (Google photo) and phone/name only where empty.
