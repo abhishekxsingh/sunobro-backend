@@ -164,12 +164,10 @@ const create = async ({ items, shipping, couponCode }, customerId, {
     );
   }
 
-  // Storefront checkout is still unpaid here. The confirmation mail is sent
-  // from markPaidAndFulfill once PayU (or another gateway) confirms payment.
-  // Admin orders are already committed — prepaid or cash on delivery.
+  // Send confirmation email — fire-and-forget, never blocks the response.
   const toEmail = order.shippingEmail
     || (customerId ? (await Customer.findById(customerId).select('email').lean())?.email : null);
-  if (toEmail && source !== 'storefront') {
+  if (toEmail) {
     emailService.sendOrderConfirmation({ to: toEmail, order }).catch(() => {});
   }
 

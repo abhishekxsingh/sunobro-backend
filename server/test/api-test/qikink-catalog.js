@@ -1,15 +1,18 @@
 const fs = require('fs');
 const path = require('path');
 const { expect } = require('chai');
+const { QIKINK } = require('../../config');
 const { Product, ProductVariant } = require('../../database/models');
 const Catalog = require('../../services/admin/qikink-catalog');
 const AdminProductsService = require('../../services/admin/products');
+const { generateQikinkImageUrl } = require('../../utils/qikink-image');
 
 // Real files copied from the Qikink dashboard (My Products export, and the
 // Product Variations table of the "shipfix" product).
 const EXPORT = fs.readFileSync(path.join(__dirname, '../fixtures/qikink-export.csv'), 'utf8');
 const VARIATIONS = fs.readFileSync(path.join(__dirname, '../fixtures/qikink-variations-shipfix.tsv'), 'utf8');
 const IMG = (n) => `https://qikink-assets.test/clientProducts/32475034/images/Front_1_c_${n}.jpg`;
+const ASSET_CLIENT = '621544';
 
 const cleanUp = async () => {
   const products = await Product.find({ qikinkProductId: { $exists: true } });
@@ -17,10 +20,26 @@ const cleanUp = async () => {
   await Product.deleteMany({ _id: { $in: products.map((p) => p._id) } });
 };
 
+describe('generateQikinkImageUrl', () => {
+  it('builds the S3 default mockup path and skips incomplete ids', () => {
+    expect(generateQikinkImageUrl({ clientId: ASSET_CLIENT, clientProductId: '32474985' }))
+      .to.equal(`https://qikink-assets.s3.ap-south-1.amazonaws.com/clients/${ASSET_CLIENT}/clientProducts/32474985/images/default.jpg`);
+    expect(generateQikinkImageUrl({
+      clientId: ASSET_CLIENT, clientProductId: '32474985', file: 'Front_1_c_1.jpg',
+    })).to.equal(`https://qikink-assets.s3.ap-south-1.amazonaws.com/clients/${ASSET_CLIENT}/clientProducts/32474985/images/Front_1_c_1.jpg`);
+    expect(generateQikinkImageUrl({ clientId: ASSET_CLIENT })).to.equal(null);
+    expect(generateQikinkImageUrl({ clientProductId: '32474985' })).to.equal(null);
+  });
+});
+
 describe('Qikink two-step catalog', function qikinkCatalog() {
   // Ten products and 60 variants against a remote test database.
   this.timeout(30000);
-  afterEach(cleanUp);
+  const previousAssetClient = QIKINK.ASSET_CLIENT_ID;
+  afterEach(async () => {
+    QIKINK.ASSET_CLIENT_ID = previousAssetClient;
+    await cleanUp();
+  });
 
   it('reads the My Products export: design names, counts, sizes, price', () => {
     const { rows, problems } = Catalog.parseExport(EXPORT);
@@ -85,6 +104,27 @@ describe('Qikink two-step catalog', function qikinkCatalog() {
 
     const published = await AdminProductsService.update(product.id, { status: 'active' });
     expect(published.doc.status).to.equal('active');
+  });
+
+  it('does not invent a cover from the My Products Product ID (that id is not the S3 folder)', async () => {
+    QIKINK.ASSET_CLIENT_ID = ASSET_CLIENT;
+    const first = await Catalog.importExport(EXPORT, { dryRun: false });
+    expect(first.applied).to.equal(true);
+    const shipoff = await Product.findOne({ qikinkProductId: '64950068' });
+    expect(shipoff.images).to.deep.equal([]);
+
+    await Product.updateOne({ _id: shipoff._id }, { $set: { images: [IMG(9)] } });
+    await Catalog.importExport(EXPORT, { dryRun: false });
+    const kept = await Product.findById(shipoff._id);
+    expect(kept.images).to.deep.equal([IMG(9)]);
+  });
+
+  it('leaves colour images empty when none are pasted (no invented S3 cover)', async () => {
+    QIKINK.ASSET_CLIENT_ID = ASSET_CLIENT;
+    await Catalog.importExport(EXPORT, { dryRun: false });
+    const product = await Product.findOne({ qikinkProductId: '64950068' });
+    const preview = await Catalog.applyVariations(product.id, { text: VARIATIONS, dryRun: true });
+    expect(preview.colours[0].image).to.equal('');
   });
 
   it('warns when rows are missing and rejects Product SKUs pasted as Store SKUs', async () => {

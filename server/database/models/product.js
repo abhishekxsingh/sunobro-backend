@@ -14,9 +14,13 @@ const productSchema = new Schema({
   status: { type: String, enum: ['review', 'active', 'draft'], default: 'review' },
   // Print-on-demand items never run out, so stock is only enforced when on.
   trackInventory: { type: Boolean, default: false },
-  // From Qikink's My Products export — links this product to its Qikink
-  // product so re-uploads update it instead of creating a duplicate.
+  // From dashboard fetch_my_products → client_product_id (S3 folder id).
+  // Also used as the My Products export Product ID when CSV-imported.
   qikinkProductId: { type: String, index: true },
+  // Dashboard asset folder id (clients/<id>/…) from fetch_my_products.client_id.
+  qikinkClientId: { type: String },
+  // Dashboard internal product_id (numeric string) when provided.
+  qikinkDashboardProductId: { type: String },
   qikinkDesign: { type: String },
   qikinkPrintSize: { type: String },
   qikinkColourCount: { type: Number },

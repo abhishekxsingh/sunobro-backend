@@ -2,6 +2,7 @@ const { Order, Product, ProductVariant } = require('../../database/models');
 const { QIKINK } = require('../../config');
 const emailService = require('../email');
 const logger = require('../../utils/logger');
+const { emptyCoverUrl } = require('../../utils/qikink-image');
 const {
   isConfigured, qikinkMessage, request, getAccessToken, qikinkHeaders, listOrders,
 } = require('./qikink-client');
@@ -36,44 +37,35 @@ const getStatus = async () => {
  */
 const syncProduct = async (productId) => {
   const product = await Product.findById(productId);
-  if (!product) {
-    return { synced: 0, message: 'Product not found.' };
-  }
+  if (!product) return { synced: 0, message: 'Product not found.' };
 
   const variants = await ProductVariant.find({ productId: product._id });
   if (variants.length === 0) {
-    return {
-      synced: 0,
-      message: 'No variants on this product. Add sizes/colors (and Qikink SKUs) first.',
-    };
+    return { synced: 0, message: 'No variants on this product. Add sizes/colors (and Qikink SKUs) first.' };
   }
 
   const missing = variants.filter((v) => !v.qikinkSku);
   if (missing.length > 0) {
-    return {
-      synced: 0,
-      message: `${missing.length} variant(s) missing qikinkSku. Set the SKU from Qikink → My Products.`,
-    };
+    return { synced: 0, message: `${missing.length} variant(s) missing qikinkSku. Set the SKU from Qikink → My Products.` };
   }
-
   if (!isConfigured()) {
-    return {
-      synced: 0,
-      message: 'Variants have Qikink SKUs, but QIKINK_CLIENT_ID / QIKINK_CLIENT_SECRET are not set.',
-    };
+    return { synced: 0, message: 'Variants have Qikink SKUs, but QIKINK_CLIENT_ID / QIKINK_CLIENT_SECRET are not set.' };
   }
 
   try {
     await getAccessToken(true);
+    const cover = emptyCoverUrl(product, QIKINK.ASSET_CLIENT_ID);
+    if (cover) {
+      product.images = [cover];
+      await product.save();
+    }
+    const note = cover ? '; cover filled from Qikink' : '';
     return {
       synced: variants.length,
-      message: `Ready: ${variants.length} variant(s) mapped. Paid orders will push to Qikink (${QIKINK.ENV}).`,
+      message: `Ready: ${variants.length} variant(s) mapped${note}. Paid orders will push to Qikink (${QIKINK.ENV}).`,
     };
   } catch (err) {
-    return {
-      synced: 0,
-      message: err.message || 'Qikink auth failed.',
-    };
+    return { synced: 0, message: err.message || 'Qikink auth failed.' };
   }
 };
 

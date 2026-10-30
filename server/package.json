@@ -10,6 +10,7 @@
     "start": "node server.js",
     "start:dev": "node --watch server.js",
     "db:seed": "node database/seed/seed.js",
+    "catalog:sync": "node database/scripts/sync-qikink-catalog.js",
     "admin:create": "node database/scripts/create-admin.js",
     "test": "npm-run-all --silent test-lint test-mocha",
     "test-lint": "eslint controllers routes services database dto-schemas utils cron config test server.js",

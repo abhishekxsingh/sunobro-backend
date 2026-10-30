@@ -2,15 +2,13 @@ const CashfreeWebhookService = require('../../services/webhook/cashfree');
 
 const handle = async (req, res) => {
   try {
-    const result = await CashfreeWebhookService.handle(req);
+    const { doc } = await CashfreeWebhookService.handle(req.body);
 
-    if (result.type === 'unauthorized') return res.unAuthorized();
-    if (result.type === 'not-configured') {
-      return res.badRequest('not-configured', result.errors);
+    if (!doc) {
+      return res.notImplemented();
     }
-    if (!result.doc) return res.notImplemented();
 
-    return res.getRequest(result.doc);
+    return res.getRequest(doc);
   } catch (error) {
     return res.serverError(error);
   }

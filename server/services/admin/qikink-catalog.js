@@ -2,6 +2,10 @@ const { Product, ProductVariant } = require('../../database/models');
 const AdminProductsService = require('./products');
 const { parseDelimited } = require('../../utils/csv');
 
+// My Products export "Product ID" is not the S3 clientProducts folder id —
+// inventing …/images/default.jpg from it yields 403s. Covers come from the
+// Product Variations Image column, the product sheet, or an admin paste.
+
 // Two-step catalog flow from Qikink's dashboard:
 //   1. "My Products" export CSV  → one product shell per Qikink product (review)
 //   2. pasted "Product Variations" table for one product → its variants
@@ -143,8 +147,9 @@ const importExport = async (text, { dryRun = true } = {}) => {
   for (let i = 0; i < plan.length; i += 1) {
     const row = plan[i];
     if (row.existingId) {
+      const $set = qikinkFields(row);
       // eslint-disable-next-line no-await-in-loop
-      await Product.updateOne({ _id: row.existingId }, { $set: qikinkFields(row) });
+      await Product.updateOne({ _id: row.existingId }, { $set });
       results.push({
         name: row.name, ok: true, id: row.existingId, action: 'update',
       });
@@ -262,7 +267,9 @@ const applyVariations = async (productId, { text, images = {}, dryRun = true }) 
   const imageFor = (colour) => {
     const given = Object.entries(images).find(([k]) => k.toLowerCase() === colour.toLowerCase())?.[1];
     if (given !== undefined) return String(given).trim();
-    return variants.find((v) => v.color === colour && v.image)?.image || existingImage(colour) || '';
+    return variants.find((v) => v.color === colour && v.image)?.image
+      || existingImage(colour)
+      || '';
   };
 
   const colours = colourOrder.map((colour) => {

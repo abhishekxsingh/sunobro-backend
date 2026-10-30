@@ -26,14 +26,6 @@ const orderSchema = new Schema({
     default: 'pending',
   },
   subtotal: { type: Number, required: true },
-  // Coupon applied at checkout; `discount` is already taken off `total`.
-  // couponCounted flips once the order is paid (or COD) so a redemption is
-  // counted exactly once, and back if the order is cancelled.
-  couponId: { type: Schema.Types.ObjectId, ref: 'Coupon' },
-  couponCode: { type: String },
-  couponHolder: { type: String },
-  couponCounted: { type: Boolean, default: false },
-  discount: { type: Number, default: 0 },
   shippingFee: { type: Number, default: 0 },
   tax: { type: Number, default: 0 },
   total: { type: Number, required: true },
@@ -51,26 +43,12 @@ const orderSchema = new Schema({
   estimatedArrival: { type: String },
   items: { type: [orderItemSchema], default: [] },
   statusHistory: { type: [statusHistorySchema], default: [] },
-  // razorpay / payu / easebuzz / cashfree = storefront checkout (whichever is
-  // active in admin settings). manual = prepaid collected offline by an admin.
-  // cod = cash on delivery collected by Qikink.
+  // razorpay = storefront checkout, manual = prepaid collected offline by an
+  // admin, cod = cash on delivery collected by Qikink.
   paymentGateway: { type: String, default: 'razorpay' },
   source: { type: String, enum: ['storefront', 'admin'], default: 'storefront' },
   razorpayOrderId: { type: String },
   razorpayPaymentId: { type: String },
-  payuTxnId: { type: String },
-  payuPaymentId: { type: String },
-  payuRefundId: { type: String },
-  payuRefundStatus: { type: String },
-  payuRefundAmount: { type: Number },
-  payuDisputeId: { type: String },
-  payuDisputeStatus: { type: String },
-  payuDisputeAmount: { type: Number },
-  payuDisputeReason: { type: String },
-  cashfreeOrderId: { type: String },
-  cashfreePaymentId: { type: String },
-  easebuzzTxnId: { type: String },
-  easebuzzPaymentId: { type: String },
   qikinkOrderId: { type: String },
   qikinkOrderNumber: { type: String },
   qikinkStatus: { type: String },
@@ -84,6 +62,5 @@ const orderSchema = new Schema({
 }, { timestamps: true });
 
 orderSchema.index({ status: 1, qikinkStatus: 1 });
-orderSchema.index({ couponId: 1, couponHolder: 1, couponCounted: 1 });
 
 module.exports = model('Order', orderSchema);
