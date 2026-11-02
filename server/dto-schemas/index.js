@@ -3,6 +3,7 @@ const adminProductsCreate = require('./admin/products/create');
 const adminProductsUpdate = require('./admin/products/update');
 const adminOrdersUpdateStatus = require('./admin/orders/updateStatus');
 const adminOrdersCreate = require('./admin/orders/create');
+const adminOrdersQuote = require('./admin/orders/quote');
 const adminCoupons = require('./admin/coupons/save');
 const adminMembers = require('./admin/members/save');
 const adminPaymentsUpdate = require('./admin/payments/update');
@@ -21,7 +22,7 @@ module.exports = {
   admin: {
     auth: { login: adminAuthLogin },
     products: { create: adminProductsCreate, update: adminProductsUpdate },
-    orders: { updateStatus: adminOrdersUpdateStatus, create: adminOrdersCreate },
+    orders: { updateStatus: adminOrdersUpdateStatus, create: adminOrdersCreate, quote: adminOrdersQuote },
     coupons: adminCoupons,
     members: adminMembers,
     payments: { update: adminPaymentsUpdate },

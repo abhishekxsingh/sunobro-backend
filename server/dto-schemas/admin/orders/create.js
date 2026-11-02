@@ -33,6 +33,13 @@ module.exports = {
       additionalProperties: false,
     },
     paymentMethod: { type: 'string', enum: ['prepaid', 'cod'] },
+    // Link to an existing customer (their email, coupons and order history),
+    // or create one from the shipping email.
+    customerId: { type: 'string', pattern: '^[a-f0-9]{24}$' },
+    createCustomer: { type: 'boolean' },
+    saveAddress: { type: 'boolean' },
+    paymentReference: { type: 'string', maxLength: 80 },
+    reason: { type: 'string', maxLength: 80 },
     note: { type: 'string' },
     couponCode: { type: 'string', maxLength: 30 },
     pushToQikink: { type: 'boolean' },

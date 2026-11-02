@@ -219,4 +219,5 @@ module.exports = {
   release,
   available,
   toOfferDTO,
+  check,
 };

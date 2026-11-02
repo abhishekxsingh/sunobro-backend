@@ -1,6 +1,7 @@
 const AdminOrdersService = require('../../services/admin/orders');
 const Schemas = require('../../dto-schemas');
 const Validator = require('../../utils/validator');
+const ManualOrders = require('../../services/admin/manual-orders');
 
 const list = async (req, res) => {
   try {
@@ -89,7 +90,7 @@ const create = async (req, res) => {
     });
     if (validationErrors) return res.badRequest('field-validation', validationErrors);
 
-    const { doc, errors, type } = await AdminOrdersService.create(req.body);
+    const { doc, errors, type } = await AdminOrdersService.create(req.body, req.admin?.sub);
     if (type === 'conflict') return res.conflict('insufficient-stock', errors);
     if (errors) return res.badRequest('field-validation', errors);
     return res.postSuccessfully(doc);
@@ -120,6 +121,32 @@ const syncQikink = async (req, res) => {
   }
 };
 
+const catalog = async (req, res) => {
+  try {
+    return res.getRequest(await ManualOrders.catalog());
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
+const quote = async (req, res) => {
+  try {
+    const { errors } = Validator.isSchemaValid({ data: req.body, schema: Schemas.admin.orders.quote });
+    if (errors) return res.badRequest('field-validation', errors);
+    const { doc } = await ManualOrders.quote(req.body);
+    return res.getRequest(doc);
+  } catch (error) {
+    return res.serverError(error);
+  }
+};
+
 module.exports = {
-  list, get, create, updateStatus, pushToQikink, syncQikink,
+  catalog,
+  quote,
+  list,
+  get,
+  create,
+  updateStatus,
+  pushToQikink,
+  syncQikink,
 };
