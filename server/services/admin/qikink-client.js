@@ -1,9 +1,12 @@
-// Low-level Qikink HTTP client: token cache, auth headers, order list.
+// Low-level Qikink HTTP client: token cache, auth headers, order list,
+// and dashboard My Products (fetch_my_products).
 const { QIKINK } = require('../../config');
 
 const USER_AGENT = 'SunoBro/1.0';
 
 const baseUrl = () => QIKINK.BASE_URL;
+const DASHBOARD_MY_PRODUCTS_URL = () => QIKINK.FETCH_MY_PRODUCTS_URL
+  || 'https://dashboard.qikink.com/index.php/products/fetch_my_products';
 
 let cachedToken = null;
 let cachedTokenUntil = 0;
@@ -111,6 +114,115 @@ const listOrders = async (query = {}) => {
   return Array.isArray(data?.data) ? data.data : [];
 };
 
+/**
+ * Build the DataTables form body Qikink's My Products grid posts
+ * (same shape as the dashboard / Postman curl).
+ */
+const myProductsFormBody = ({ draw = 1, start = 0, length = 100 } = {}) => {
+  const body = new URLSearchParams();
+  body.set('draw', String(draw));
+  for (let i = 0; i < 6; i += 1) {
+    const data = i === 3 ? 'base_price' : (i === 4 ? 'price_range' : 'function');
+    const orderable = i === 3 || i === 5 ? 'true' : 'false';
+    body.set(`columns[${i}][data]`, data);
+    body.set(`columns[${i}][name]`, '');
+    body.set(`columns[${i}][searchable]`, 'true');
+    body.set(`columns[${i}][orderable]`, orderable);
+    body.set(`columns[${i}][search][value]`, '');
+    body.set(`columns[${i}][search][regex]`, 'false');
+  }
+  body.set('order[0][column]', '0');
+  body.set('order[0][dir]', 'asc');
+  body.set('start', String(start));
+  body.set('length', String(length));
+  body.set('search[value]', '');
+  body.set('search[regex]', 'false');
+  body.set('searched_client_product_id', '');
+  return body;
+};
+
+/**
+ * Dashboard DataTables endpoint for My Products.
+ * Needs a logged-in dashboard Cookie (browser/Postman attach it automatically;
+ * server cron must set QIKINK_DASHBOARD_COOKIE). Custom API token alone → signin.
+ */
+const fetchMyProductsPage = async ({
+  draw = 1, start = 0, length = 100,
+} = {}) => {
+  if (!QIKINK.DASHBOARD_COOKIE) {
+    throw new Error(
+      'QIKINK_DASHBOARD_COOKIE is empty. Copy the Cookie header from the working '
+      + 'fetch_my_products request in browser DevTools / Postman (Code → cURL) into .env.',
+    );
+  }
+
+  const headers = {
+    Accept: 'application/json, text/javascript, */*; q=0.01',
+    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    'X-Requested-With': 'XMLHttpRequest',
+    'User-Agent': USER_AGENT,
+    Referer: 'https://dashboard.qikink.com/',
+    Origin: 'https://dashboard.qikink.com',
+    Cookie: QIKINK.DASHBOARD_COOKIE,
+  };
+
+  const res = await fetch(DASHBOARD_MY_PRODUCTS_URL(), {
+    method: 'POST',
+    headers,
+    body: myProductsFormBody({ draw, start, length }),
+    redirect: 'manual',
+  });
+  const location = res.headers.get('location') || '';
+  const raw = await res.text();
+  if (res.status >= 300 && res.status < 400 && /signin|login/i.test(location)) {
+    throw new Error(
+      'Qikink session expired (redirected to sign-in). Refresh QIKINK_DASHBOARD_COOKIE from a logged-in fetch_my_products request.',
+    );
+  }
+  let data = {};
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    if (/signin|sign up|login/i.test(raw)) {
+      throw new Error(
+        'Qikink returned the sign-in page. Refresh QIKINK_DASHBOARD_COOKIE.',
+      );
+    }
+    throw new Error(`Qikink fetch_my_products returned non-JSON (${res.status}).`);
+  }
+  if (!res.ok || data?.error) {
+    throw new Error(qikinkMessage(data, res.status));
+  }
+  return data;
+};
+
+/** Pages through fetch_my_products until all rows are loaded. */
+const fetchMyProducts = async ({ pageSize = 100 } = {}) => {
+  const all = [];
+  let start = 0;
+  let draw = 1;
+  let total = Infinity;
+  while (start < total) {
+    // eslint-disable-next-line no-await-in-loop
+    const page = await fetchMyProductsPage({ draw, start, length: pageSize });
+    const rows = Array.isArray(page?.data) ? page.data : [];
+    total = Number(page?.recordsFiltered ?? page?.recordsTotal ?? rows.length) || rows.length;
+    all.push(...rows);
+    if (!rows.length) break;
+    start += rows.length;
+    draw += 1;
+    if (rows.length < pageSize) break;
+  }
+  return all;
+};
+
 module.exports = {
-  isConfigured, qikinkMessage, request, getAccessToken, qikinkHeaders, listOrders,
+  isConfigured,
+  qikinkMessage,
+  request,
+  getAccessToken,
+  qikinkHeaders,
+  listOrders,
+  fetchMyProductsPage,
+  fetchMyProducts,
 };

@@ -71,8 +71,28 @@ module.exports = {
       || (QIKINK_ENV === 'live' ? LIVE_QIKINK_SECRET : ''),
     ENV: QIKINK_ENV,
     BASE_URL: QIKINK_ENV === 'sandbox' ? 'https://sandbox.qikink.com' : 'https://api.qikink.com',
+    // Dashboard S3 asset folder id (clients/<id>/clientProducts/...), not the
+    // Custom API ClientId. Used to auto-fill empty product cover images.
+    ASSET_CLIENT_ID: process.env.QIKINK_ASSET_CLIENT_ID || '',
     // Background status sync + failed-push retry. 0 disables it.
     SYNC_INTERVAL_MS: Number(process.env.QIKINK_SYNC_INTERVAL_MS ?? 15 * 60 * 1000),
+    // Dashboard My Products list (DataTables). Returns client_id + client_product_id
+    // used for S3 mockup URLs. Custom API token is sent; many accounts also need
+    // QIKINK_DASHBOARD_COOKIE from a logged-in browser session.
+    FETCH_MY_PRODUCTS_URL: process.env.QIKINK_FETCH_MY_PRODUCTS_URL
+      || 'https://dashboard.qikink.com/index.php/products/fetch_my_products',
+    DASHBOARD_COOKIE: process.env.QIKINK_DASHBOARD_COOKIE || '',
+    // Optional CSV fallback when the dashboard session is missing.
+    CATALOG_EXPORT_PATH: process.env.QIKINK_CATALOG_EXPORT_PATH || '',
+    CATALOG_EXPORT_URL: process.env.QIKINK_CATALOG_EXPORT_URL || '',
+    // Poll interval. 10000 = 10s (dev); later use 600000–900000 (10–15 min).
+    // Set 0 to disable the catalog cron.
+    CATALOG_SYNC_INTERVAL_MS: Number(
+      process.env.QIKINK_CATALOG_SYNC_INTERVAL_MS ?? 10_000,
+    ),
+    // After import, scaffold missing variants + publish so the storefront shows
+    // new products (temporary v-pending-… Store SKUs until real ones are pasted).
+    CATALOG_AUTO_PUBLISH: process.env.QIKINK_CATALOG_AUTO_PUBLISH !== 'false',
   },
   FIREBASE: {
     PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'sunobro',
